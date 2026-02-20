@@ -177,6 +177,7 @@ class TermuxWorkdirServerManager(
             STATE_DIR="$TERMUX_STATE_DIR"
             PID_FILE="${'$'}STATE_DIR/workdir_http_server.pid"
             PORT_FILE="${'$'}STATE_DIR/workdir_http_server.port"
+            DIR_FILE="${'$'}STATE_DIR/workdir_http_server.dir"
             LOG_FILE="${'$'}STATE_DIR/workdir_http_server.log"
             SERVE_DIR='$safeWorkdir'
             PORT=$port
@@ -210,21 +211,64 @@ sys.exit(0)
 PY
             }
 
-            ps_lines() {
-              ps -ef 2>/dev/null || ps -A 2>/dev/null || ps 2>/dev/null || true
-            }
-
             find_server_pids() {
               PORT="${'$'}1"
-              ps_lines | awk -v port="${'$'}PORT" '
-                ${'$'}0 ~ /python3/ &&
-                ${'$'}0 ~ /-m[[:space:]]+http\\.server/ &&
-                ${'$'}0 ~ /--bind[[:space:]]+127\\.0\\.0\\.1/ &&
-                match(${'$'}0, "(^|[[:space:]])" port "([[:space:]]|${'$'})") {
-                  pid=${'$'}2
-                  if (pid ~ /^[0-9]+${'$'}/) print pid
-                }
-              '
+              DIR="${'$'}2"
+              python3 - "${'$'}PORT" "${'$'}DIR" 2>/dev/null <<'PY' || true
+import os
+import sys
+
+port = sys.argv[1]
+serve_dir = sys.argv[2] if len(sys.argv) > 2 else ""
+
+def read_cmdline(pid: str):
+    try:
+        with open(f"/proc/{pid}/cmdline", "rb") as f:
+            raw = f.read()
+        if not raw:
+            return []
+        parts = raw.split(b"\0")
+        return [p.decode(errors="ignore") for p in parts if p]
+    except Exception:
+        return []
+
+def is_workdir_server(args):
+    if not args:
+        return False
+    exe = os.path.basename(args[0])
+    if not exe.startswith("python"):
+        return False
+    try:
+        mi = args.index("-m")
+    except ValueError:
+        return False
+    if mi + 1 >= len(args) or args[mi + 1] != "http.server":
+        return False
+    if port not in args:
+        return False
+    if "--bind" not in args:
+        return False
+    bi = args.index("--bind")
+    if bi + 1 >= len(args) or args[bi + 1] != "127.0.0.1":
+        return False
+    if serve_dir:
+        if "--directory" not in args:
+            return False
+        di = args.index("--directory")
+        if di + 1 >= len(args) or args[di + 1] != serve_dir:
+            return False
+    return True
+
+pids = []
+for pid in os.listdir("/proc"):
+    if not pid.isdigit():
+        continue
+    args = read_cmdline(pid)
+    if is_workdir_server(args):
+        pids.append(pid)
+
+sys.stdout.write("\n".join(pids))
+PY
             }
 
             kill_pid() {
@@ -240,8 +284,9 @@ PY
             if [ -f "${'$'}PID_FILE" ]; then
               OLD_PID="${'$'}(cat \"${'$'}PID_FILE\" 2>/dev/null || true)"
               OLD_PORT="${'$'}(cat \"${'$'}PORT_FILE\" 2>/dev/null || true)"
+              OLD_DIR="${'$'}(cat \"${'$'}DIR_FILE\" 2>/dev/null || true)"
               if [ -n "${'$'}OLD_PID" ] && kill -0 "${'$'}OLD_PID" 2>/dev/null; then
-                if [ "${'$'}OLD_PORT" = "${'$'}PORT" ]; then
+                if [ "${'$'}OLD_PORT" = "${'$'}PORT" ] && [ "${'$'}OLD_DIR" = "${'$'}SERVE_DIR" ]; then
                   echo "ALREADY_RUNNING ${'$'}OLD_PID ${'$'}OLD_PORT"
                   exit 0
                 fi
@@ -249,7 +294,7 @@ PY
                 sleep 0.2
                 kill -9 "${'$'}OLD_PID" 2>/dev/null || true
               fi
-              rm -f "${'$'}PID_FILE" "${'$'}PORT_FILE"
+              rm -f "${'$'}PID_FILE" "${'$'}PORT_FILE" "${'$'}DIR_FILE"
             fi
 
             if [ ! -d "${'$'}SERVE_DIR" ]; then
@@ -258,7 +303,7 @@ PY
             fi
 
             if ! port_is_free "${'$'}PORT"; then
-              CANDIDATES="${'$'}(find_server_pids \"${'$'}PORT\" | tr '\n' ' ')"
+              CANDIDATES="${'$'}(find_server_pids \"${'$'}PORT\" \"${'$'}SERVE_DIR\" | tr '\n' ' ')"
               if [ -n "${'$'}CANDIDATES" ]; then
                 echo "PORT_IN_USE ${'$'}PORT, killing: ${'$'}CANDIDATES"
                 for PID in ${'$'}CANDIDATES; do
@@ -266,14 +311,21 @@ PY
                 done
                 sleep 0.2
               fi
+              for _ in 1 2 3 4 5 6 7 8 9 10; do
+                if port_is_free "${'$'}PORT"; then
+                  break
+                fi
+                sleep 0.2
+              done
               if ! port_is_free "${'$'}PORT"; then
                 echo "PORT_STILL_IN_USE ${'$'}PORT"
-                ps_lines | awk -v port="${'$'}PORT" '${'$'}0 ~ /python3/ && ${'$'}0 ~ /-m[[:space:]]+http\\.server/ && match(${'$'}0, "(^|[[:space:]])" port "([[:space:]]|${'$'})") { print ${'$'}0 }' | head -n 5 || true
+                echo "TIP: check Termux processes with: ps -ef | grep http.server"
                 exit 98
               fi
             fi
 
             : > "${'$'}LOG_FILE"
+            echo "${'$'}SERVE_DIR" > "${'$'}DIR_FILE"
             nohup python3 -m http.server "${'$'}PORT" --bind 127.0.0.1 --directory "${'$'}SERVE_DIR" > "${'$'}LOG_FILE" 2>&1 &
             NEW_PID="${'$'}!"
 
@@ -301,21 +353,67 @@ PY
             PORTS=""
             CLEAN_FILES=""
 
-            ps_lines() {
-              ps -ef 2>/dev/null || ps -A 2>/dev/null || ps 2>/dev/null || true
-            }
-
             find_server_pids() {
               PORT="${'$'}1"
-              ps_lines | awk -v port="${'$'}PORT" '
-                ${'$'}0 ~ /python3/ &&
-                ${'$'}0 ~ /-m[[:space:]]+http\\.server/ &&
-                ${'$'}0 ~ /--bind[[:space:]]+127\\.0\\.0\\.1/ &&
-                match(${'$'}0, "(^|[[:space:]])" port "([[:space:]]|${'$'})") {
-                  pid=${'$'}2
-                  if (pid ~ /^[0-9]+${'$'}/) print pid
-                }
-              '
+              DIR="${'$'}2"
+              if ! command -v python3 >/dev/null 2>&1; then
+                return 0
+              fi
+              python3 - "${'$'}PORT" "${'$'}DIR" 2>/dev/null <<'PY' || true
+import os
+import sys
+
+port = sys.argv[1]
+serve_dir = sys.argv[2] if len(sys.argv) > 2 else ""
+
+def read_cmdline(pid: str):
+    try:
+        with open(f"/proc/{pid}/cmdline", "rb") as f:
+            raw = f.read()
+        if not raw:
+            return []
+        parts = raw.split(b"\0")
+        return [p.decode(errors="ignore") for p in parts if p]
+    except Exception:
+        return []
+
+def is_workdir_server(args):
+    if not args:
+        return False
+    exe = os.path.basename(args[0])
+    if not exe.startswith("python"):
+        return False
+    try:
+        mi = args.index("-m")
+    except ValueError:
+        return False
+    if mi + 1 >= len(args) or args[mi + 1] != "http.server":
+        return False
+    if port not in args:
+        return False
+    if "--bind" not in args:
+        return False
+    bi = args.index("--bind")
+    if bi + 1 >= len(args) or args[bi + 1] != "127.0.0.1":
+        return False
+    if serve_dir:
+        if "--directory" not in args:
+            return False
+        di = args.index("--directory")
+        if di + 1 >= len(args) or args[di + 1] != serve_dir:
+            return False
+    return True
+
+pids = []
+for pid in os.listdir("/proc"):
+    if not pid.isdigit():
+        continue
+    args = read_cmdline(pid)
+    if is_workdir_server(args):
+        pids.append(pid)
+
+sys.stdout.write("\n".join(pids))
+PY
             }
 
             kill_pid() {
@@ -353,27 +451,51 @@ sys.exit(0)
 PY
             }
 
+            wait_port_free() {
+              PORT="${'$'}1"
+              for _ in 1 2 3 4 5 6 7 8 9 10; do
+                if port_is_free "${'$'}PORT"; then
+                  return 0
+                fi
+                sleep 0.2
+              done
+              return 1
+            }
+
             stop_in_dir() {
               STATE_DIR="${'$'}1"
               PID_FILE="${'$'}STATE_DIR/workdir_http_server.pid"
               PORT_FILE="${'$'}STATE_DIR/workdir_http_server.port"
-              CLEAN_FILES="${'$'}CLEAN_FILES ${'$'}PID_FILE ${'$'}PORT_FILE"
+              DIR_FILE="${'$'}STATE_DIR/workdir_http_server.dir"
+              CLEAN_FILES="${'$'}CLEAN_FILES ${'$'}PID_FILE ${'$'}PORT_FILE ${'$'}DIR_FILE"
               PORT_FROM_FILE="${'$'}(cat \"${'$'}PORT_FILE\" 2>/dev/null || true)"
+              DIR_FROM_FILE="${'$'}(cat \"${'$'}DIR_FILE\" 2>/dev/null || true)"
               case "${'$'}PORT_FROM_FILE" in
                 ''|*[!0-9]*) : ;;
                 *) PORTS="${'$'}PORTS ${'$'}PORT_FROM_FILE" ;;
               esac
 
-	              PID="${'$'}(cat \"${'$'}PID_FILE\" 2>/dev/null || true)"
-	              if [ -n "${'$'}PID" ] && kill -0 "${'$'}PID" 2>/dev/null; then
-	                if kill -0 "${'$'}PID" 2>/dev/null; then
-	                  kill_pid "${'$'}PID"
-	                fi
-	                if kill -0 "${'$'}PID" 2>/dev/null; then
-	                  echo "FAILED_TO_STOP pid=${'$'}PID"
-	                  FAILED=1
-	                fi
-	              fi
+              PID="${'$'}(cat \"${'$'}PID_FILE\" 2>/dev/null || true)"
+              if [ -n "${'$'}PID" ] && kill -0 "${'$'}PID" 2>/dev/null; then
+                kill_pid "${'$'}PID"
+                if kill -0 "${'$'}PID" 2>/dev/null; then
+                  echo "FAILED_TO_STOP pid=${'$'}PID"
+                  FAILED=1
+                fi
+              fi
+
+              case "${'$'}PORT_FROM_FILE" in
+                ''|*[!0-9]*) : ;;
+                *)
+                  for PID in ${'$'}(find_server_pids "${'$'}PORT_FROM_FILE" "${'$'}DIR_FROM_FILE"); do
+                    kill_pid "${'$'}PID"
+                  done
+                  if ! wait_port_free "${'$'}PORT_FROM_FILE"; then
+                    echo "PORT_STILL_LISTENING ${'$'}PORT_FROM_FILE"
+                    FAILED=1
+                  fi
+                ;;
+              esac
             }
 
             stop_in_dir "$TERMUX_STATE_DIR"
@@ -386,19 +508,15 @@ PY
               *) PORTS="${'$'}PORTS ${'$'}PORT_HINT" ;;
             esac
 
-	            for PORT in ${'$'}PORTS; do
-	              for PID in ${'$'}(find_server_pids "${'$'}PORT"); do
-	                kill_pid "${'$'}PID"
-	              done
-	            done
-
-	            for PORT in ${'$'}PORTS; do
-	              if ! port_is_free "${'$'}PORT"; then
-	                echo "PORT_STILL_LISTENING ${'$'}PORT"
-	                ps_lines | awk -v port="${'$'}PORT" '${'$'}0 ~ /python3/ && ${'$'}0 ~ /-m[[:space:]]+http\\.server/ && match(${'$'}0, "(^|[[:space:]])" port "([[:space:]]|${'$'})") { print ${'$'}0 }' | head -n 5 || true
-	                FAILED=1
-	              fi
-	            done
+            for PORT in ${'$'}PORTS; do
+              for PID in ${'$'}(find_server_pids "${'$'}PORT" ""); do
+                kill_pid "${'$'}PID"
+              done
+              if ! wait_port_free "${'$'}PORT"; then
+                echo "PORT_STILL_LISTENING ${'$'}PORT"
+                FAILED=1
+              fi
+            done
 
             if [ "${'$'}FAILED" -ne 0 ]; then
               exit 1
