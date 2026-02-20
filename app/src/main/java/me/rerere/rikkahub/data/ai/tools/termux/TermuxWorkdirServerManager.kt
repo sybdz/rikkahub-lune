@@ -81,7 +81,10 @@ class TermuxWorkdirServerManager(
                 termuxCommandManager.run(
                     TermuxRunCommandRequest(
                         commandPath = TERMUX_BASH_PATH,
-                        arguments = listOf("-lc", buildStopScript()),
+                        arguments = listOf(
+                            "-lc",
+                            buildStopScript(portHint = settingsStore.settingsFlow.value.termuxWorkdirServerPort),
+                        ),
                         workdir = TERMUX_HOME_PATH,
                         background = settingsStore.settingsFlow.value.termuxRunInBackground,
                         timeoutMs = 10_000L,
@@ -113,7 +116,10 @@ class TermuxWorkdirServerManager(
                 termuxCommandManager.run(
                     TermuxRunCommandRequest(
                         commandPath = TERMUX_BASH_PATH,
-                        arguments = listOf("-lc", buildStopScript()),
+                        arguments = listOf(
+                            "-lc",
+                            buildStopScript(portHint = port),
+                        ),
                         workdir = TERMUX_HOME_PATH,
                         background = settingsStore.settingsFlow.value.termuxRunInBackground,
                         timeoutMs = 10_000L,
@@ -168,7 +174,7 @@ class TermuxWorkdirServerManager(
         return """
             set -e
 
-            STATE_DIR="${'$'}HOME/.rikkahub"
+            STATE_DIR="$TERMUX_STATE_DIR"
             PID_FILE="${'$'}STATE_DIR/workdir_http_server.pid"
             PORT_FILE="${'$'}STATE_DIR/workdir_http_server.port"
             SERVE_DIR='$safeWorkdir'
@@ -213,32 +219,118 @@ class TermuxWorkdirServerManager(
         """.trimIndent()
     }
 
-    private fun buildStopScript(): String {
+    private fun buildStopScript(portHint: Int?): String {
+        val portHintText = portHint?.toString().orEmpty()
         return """
             set -e
 
-            STATE_DIR="${'$'}HOME/.rikkahub"
-            PID_FILE="${'$'}STATE_DIR/workdir_http_server.pid"
-            PORT_FILE="${'$'}STATE_DIR/workdir_http_server.port"
+            PORT_HINT="$portHintText"
+            FAILED=0
+            PORTS=""
 
-            if [ ! -f "${'$'}PID_FILE" ]; then
-              rm -f "${'$'}PORT_FILE"
-              echo "NOT_RUNNING"
-              exit 0
-            fi
+            is_port_listening() {
+              PORT="${'$'}1"
+              case "${'$'}PORT" in
+                ''|*[!0-9]*) return 1 ;;
+              esac
+              HEX="${'$'}(printf '%04X' \"${'$'}PORT\")"
+              if awk -v hex=":${'$'}HEX" '${'$'}2 ~ (hex "${'$'}") && ${'$'}4 == "0A" { found=1; exit } END { exit(found?0:1) }' /proc/net/tcp 2>/dev/null; then
+                return 0
+              fi
+              if awk -v hex=":${'$'}HEX" '${'$'}2 ~ (hex "${'$'}") && ${'$'}4 == "0A" { found=1; exit } END { exit(found?0:1) }' /proc/net/tcp6 2>/dev/null; then
+                return 0
+              fi
+              return 1
+            }
 
-            PID="${'$'}(cat \"${'$'}PID_FILE\" 2>/dev/null || true)"
-            if [ -z "${'$'}PID" ]; then
+            kill_port_listeners() {
+              PORT="${'$'}1"
+              case "${'$'}PORT" in
+                ''|*[!0-9]*) return 0 ;;
+              esac
+              HEX="${'$'}(printf '%04X' \"${'$'}PORT\")"
+              for inode in ${'$'}(awk -v hex=":${'$'}HEX" '${'$'}2 ~ (hex "${'$'}") && ${'$'}4 == "0A" {print ${'$'}10}' /proc/net/tcp 2>/dev/null || true); do
+                for pid_dir in /proc/[0-9]*; do
+                  pid="${'$'}{pid_dir##*/}"
+                  for fd in "${'$'}pid_dir"/fd/*; do
+                    link="${'$'}(readlink \"${'$'}fd\" 2>/dev/null || true)"
+                    if [ "${'$'}link" = "socket:[${'$'}inode]" ]; then
+                      kill "${'$'}pid" 2>/dev/null || true
+                      sleep 0.1
+                      kill -9 "${'$'}pid" 2>/dev/null || true
+                      break
+                    fi
+                  done
+                done
+              done
+              for inode in ${'$'}(awk -v hex=":${'$'}HEX" '${'$'}2 ~ (hex "${'$'}") && ${'$'}4 == "0A" {print ${'$'}10}' /proc/net/tcp6 2>/dev/null || true); do
+                for pid_dir in /proc/[0-9]*; do
+                  pid="${'$'}{pid_dir##*/}"
+                  for fd in "${'$'}pid_dir"/fd/*; do
+                    link="${'$'}(readlink \"${'$'}fd\" 2>/dev/null || true)"
+                    if [ "${'$'}link" = "socket:[${'$'}inode]" ]; then
+                      kill "${'$'}pid" 2>/dev/null || true
+                      sleep 0.1
+                      kill -9 "${'$'}pid" 2>/dev/null || true
+                      break
+                    fi
+                  done
+                done
+              done
+            }
+
+            stop_in_dir() {
+              STATE_DIR="${'$'}1"
+              PID_FILE="${'$'}STATE_DIR/workdir_http_server.pid"
+              PORT_FILE="${'$'}STATE_DIR/workdir_http_server.port"
+              PORT_FROM_FILE="${'$'}(cat \"${'$'}PORT_FILE\" 2>/dev/null || true)"
+              case "${'$'}PORT_FROM_FILE" in
+                ''|*[!0-9]*) : ;;
+                *) PORTS="${'$'}PORTS ${'$'}PORT_FROM_FILE" ;;
+              esac
+
+              PID="${'$'}(cat \"${'$'}PID_FILE\" 2>/dev/null || true)"
+              if [ -n "${'$'}PID" ] && kill -0 "${'$'}PID" 2>/dev/null; then
+                kill "${'$'}PID" 2>/dev/null || true
+                sleep 0.2
+                if kill -0 "${'$'}PID" 2>/dev/null; then
+                  kill -9 "${'$'}PID" 2>/dev/null || true
+                  sleep 0.2
+                fi
+                if kill -0 "${'$'}PID" 2>/dev/null; then
+                  echo "FAILED_TO_STOP pid=${'$'}PID"
+                  FAILED=1
+                fi
+              fi
+
               rm -f "${'$'}PID_FILE" "${'$'}PORT_FILE"
-              echo "NOT_RUNNING"
-              exit 0
+            }
+
+            stop_in_dir "$TERMUX_STATE_DIR"
+            if [ -n "${'$'}{HOME:-}" ] && [ "${'$'}HOME" != "$TERMUX_HOME_PATH" ]; then
+              stop_in_dir "${'$'}HOME/.rikkahub"
             fi
 
-            kill "${'$'}PID" 2>/dev/null || true
-            sleep 0.2
-            kill -9 "${'$'}PID" 2>/dev/null || true
-            rm -f "${'$'}PID_FILE" "${'$'}PORT_FILE"
-            echo "STOPPED ${'$'}PID"
+            case "${'$'}PORT_HINT" in
+              ''|*[!0-9]*) : ;;
+              *) PORTS="${'$'}PORTS ${'$'}PORT_HINT" ;;
+            esac
+
+            for PORT in ${'$'}PORTS; do
+              if is_port_listening "${'$'}PORT"; then
+                kill_port_listeners "${'$'}PORT"
+                sleep 0.2
+                if is_port_listening "${'$'}PORT"; then
+                  echo "PORT_STILL_LISTENING ${'$'}PORT"
+                  FAILED=1
+                fi
+              fi
+            done
+
+            if [ "${'$'}FAILED" -ne 0 ]; then
+              exit 1
+            fi
+            echo "STOPPED"
             exit 0
         """.trimIndent()
     }
@@ -264,5 +356,6 @@ class TermuxWorkdirServerManager(
     companion object {
         private const val TERMUX_BASH_PATH = "/data/data/com.termux/files/usr/bin/bash"
         private const val TERMUX_HOME_PATH = "/data/data/com.termux/files/home"
+        private const val TERMUX_STATE_DIR = "$TERMUX_HOME_PATH/.rikkahub"
     }
 }
