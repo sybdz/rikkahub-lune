@@ -188,6 +188,55 @@ class TermuxWorkdirServerManager(
               exit 127
             fi
 
+            port_is_free() {
+              PORT="${'$'}1"
+              python3 - "${'$'}PORT" <<'PY'
+import socket
+import sys
+
+port = int(sys.argv[1])
+s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+try:
+    s.bind(("127.0.0.1", port))
+except OSError:
+    sys.exit(1)
+finally:
+    try:
+        s.close()
+    except Exception:
+        pass
+sys.exit(0)
+PY
+            }
+
+            ps_lines() {
+              ps -ef 2>/dev/null || ps -A 2>/dev/null || ps 2>/dev/null || true
+            }
+
+            find_server_pids() {
+              PORT="${'$'}1"
+              ps_lines | awk -v port="${'$'}PORT" '
+                ${'$'}0 ~ /python3/ &&
+                ${'$'}0 ~ /-m[[:space:]]+http\\.server/ &&
+                ${'$'}0 ~ /--bind[[:space:]]+127\\.0\\.0\\.1/ &&
+                match(${'$'}0, "(^|[[:space:]])" port "([[:space:]]|${'$'})") {
+                  pid=${'$'}2
+                  if (pid ~ /^[0-9]+${'$'}/) print pid
+                }
+              '
+            }
+
+            kill_pid() {
+              PID="${'$'}1"
+              case "${'$'}PID" in
+                ''|*[!0-9]*) return 0 ;;
+              esac
+              kill "${'$'}PID" 2>/dev/null || true
+              sleep 0.2
+              kill -9 "${'$'}PID" 2>/dev/null || true
+            }
+
             if [ -f "${'$'}PID_FILE" ]; then
               OLD_PID="${'$'}(cat \"${'$'}PID_FILE\" 2>/dev/null || true)"
               OLD_PORT="${'$'}(cat \"${'$'}PORT_FILE\" 2>/dev/null || true)"
@@ -208,9 +257,24 @@ class TermuxWorkdirServerManager(
               exit 1
             fi
 
+            if ! port_is_free "${'$'}PORT"; then
+              CANDIDATES="${'$'}(find_server_pids \"${'$'}PORT\" | tr '\n' ' ')"
+              if [ -n "${'$'}CANDIDATES" ]; then
+                echo "PORT_IN_USE ${'$'}PORT, killing: ${'$'}CANDIDATES"
+                for PID in ${'$'}CANDIDATES; do
+                  kill_pid "${'$'}PID"
+                done
+                sleep 0.2
+              fi
+              if ! port_is_free "${'$'}PORT"; then
+                echo "PORT_STILL_IN_USE ${'$'}PORT"
+                ps_lines | awk -v port="${'$'}PORT" '${'$'}0 ~ /python3/ && ${'$'}0 ~ /-m[[:space:]]+http\\.server/ && match(${'$'}0, "(^|[[:space:]])" port "([[:space:]]|${'$'})") { print ${'$'}0 }' | head -n 5 || true
+                exit 98
+              fi
+            fi
+
             : > "${'$'}LOG_FILE"
-            cd "${'$'}SERVE_DIR"
-            nohup python3 -m http.server "${'$'}PORT" --bind 127.0.0.1 > "${'$'}LOG_FILE" 2>&1 &
+            nohup python3 -m http.server "${'$'}PORT" --bind 127.0.0.1 --directory "${'$'}SERVE_DIR" > "${'$'}LOG_FILE" 2>&1 &
             NEW_PID="${'$'}!"
 
             sleep 0.2
@@ -237,55 +301,56 @@ class TermuxWorkdirServerManager(
             PORTS=""
             CLEAN_FILES=""
 
-            is_port_listening() {
-              PORT="${'$'}1"
-              case "${'$'}PORT" in
-                ''|*[!0-9]*) return 1 ;;
-              esac
-              HEX="${'$'}(printf '%04X' \"${'$'}PORT\")"
-              if awk -v hex=":${'$'}HEX" '${'$'}2 ~ (hex "${'$'}") && ${'$'}4 == "0A" { found=1; exit } END { exit(found?0:1) }' /proc/net/tcp 2>/dev/null; then
-                return 0
-              fi
-              if awk -v hex=":${'$'}HEX" '${'$'}2 ~ (hex "${'$'}") && ${'$'}4 == "0A" { found=1; exit } END { exit(found?0:1) }' /proc/net/tcp6 2>/dev/null; then
-                return 0
-              fi
-              return 1
+            ps_lines() {
+              ps -ef 2>/dev/null || ps -A 2>/dev/null || ps 2>/dev/null || true
             }
 
-            kill_port_listeners() {
+            find_server_pids() {
               PORT="${'$'}1"
-              case "${'$'}PORT" in
+              ps_lines | awk -v port="${'$'}PORT" '
+                ${'$'}0 ~ /python3/ &&
+                ${'$'}0 ~ /-m[[:space:]]+http\\.server/ &&
+                ${'$'}0 ~ /--bind[[:space:]]+127\\.0\\.0\\.1/ &&
+                match(${'$'}0, "(^|[[:space:]])" port "([[:space:]]|${'$'})") {
+                  pid=${'$'}2
+                  if (pid ~ /^[0-9]+${'$'}/) print pid
+                }
+              '
+            }
+
+            kill_pid() {
+              PID="${'$'}1"
+              case "${'$'}PID" in
                 ''|*[!0-9]*) return 0 ;;
               esac
-              HEX="${'$'}(printf '%04X' \"${'$'}PORT\")"
-              for inode in ${'$'}(awk -v hex=":${'$'}HEX" '${'$'}2 ~ (hex "${'$'}") && ${'$'}4 == "0A" {print ${'$'}10}' /proc/net/tcp 2>/dev/null || true); do
-                for pid_dir in /proc/[0-9]*; do
-                  pid="${'$'}{pid_dir##*/}"
-                  for fd in "${'$'}pid_dir"/fd/*; do
-                    link="${'$'}(readlink \"${'$'}fd\" 2>/dev/null || true)"
-                    if [ "${'$'}link" = "socket:[${'$'}inode]" ]; then
-                      kill "${'$'}pid" 2>/dev/null || true
-                      sleep 0.1
-                      kill -9 "${'$'}pid" 2>/dev/null || true
-                      break
-                    fi
-                  done
-                done
-              done
-              for inode in ${'$'}(awk -v hex=":${'$'}HEX" '${'$'}2 ~ (hex "${'$'}") && ${'$'}4 == "0A" {print ${'$'}10}' /proc/net/tcp6 2>/dev/null || true); do
-                for pid_dir in /proc/[0-9]*; do
-                  pid="${'$'}{pid_dir##*/}"
-                  for fd in "${'$'}pid_dir"/fd/*; do
-                    link="${'$'}(readlink \"${'$'}fd\" 2>/dev/null || true)"
-                    if [ "${'$'}link" = "socket:[${'$'}inode]" ]; then
-                      kill "${'$'}pid" 2>/dev/null || true
-                      sleep 0.1
-                      kill -9 "${'$'}pid" 2>/dev/null || true
-                      break
-                    fi
-                  done
-                done
-              done
+              kill "${'$'}PID" 2>/dev/null || true
+              sleep 0.2
+              kill -9 "${'$'}PID" 2>/dev/null || true
+            }
+
+            port_is_free() {
+              PORT="${'$'}1"
+              if ! command -v python3 >/dev/null 2>&1; then
+                return 0
+              fi
+              python3 - "${'$'}PORT" <<'PY'
+import socket
+import sys
+
+port = int(sys.argv[1])
+s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+try:
+    s.bind(("127.0.0.1", port))
+except OSError:
+    sys.exit(1)
+finally:
+    try:
+        s.close()
+    except Exception:
+        pass
+sys.exit(0)
+PY
             }
 
             stop_in_dir() {
@@ -299,19 +364,16 @@ class TermuxWorkdirServerManager(
                 *) PORTS="${'$'}PORTS ${'$'}PORT_FROM_FILE" ;;
               esac
 
-              PID="${'$'}(cat \"${'$'}PID_FILE\" 2>/dev/null || true)"
-              if [ -n "${'$'}PID" ] && kill -0 "${'$'}PID" 2>/dev/null; then
-                kill "${'$'}PID" 2>/dev/null || true
-                sleep 0.2
-                if kill -0 "${'$'}PID" 2>/dev/null; then
-                  kill -9 "${'$'}PID" 2>/dev/null || true
-                  sleep 0.2
-                fi
-                if kill -0 "${'$'}PID" 2>/dev/null; then
-                  echo "FAILED_TO_STOP pid=${'$'}PID"
-                  FAILED=1
-                fi
-              fi
+	              PID="${'$'}(cat \"${'$'}PID_FILE\" 2>/dev/null || true)"
+	              if [ -n "${'$'}PID" ] && kill -0 "${'$'}PID" 2>/dev/null; then
+	                if kill -0 "${'$'}PID" 2>/dev/null; then
+	                  kill_pid "${'$'}PID"
+	                fi
+	                if kill -0 "${'$'}PID" 2>/dev/null; then
+	                  echo "FAILED_TO_STOP pid=${'$'}PID"
+	                  FAILED=1
+	                fi
+	              fi
             }
 
             stop_in_dir "$TERMUX_STATE_DIR"
@@ -324,16 +386,19 @@ class TermuxWorkdirServerManager(
               *) PORTS="${'$'}PORTS ${'$'}PORT_HINT" ;;
             esac
 
-            for PORT in ${'$'}PORTS; do
-              if is_port_listening "${'$'}PORT"; then
-                kill_port_listeners "${'$'}PORT"
-                sleep 0.2
-                if is_port_listening "${'$'}PORT"; then
-                  echo "PORT_STILL_LISTENING ${'$'}PORT"
-                  FAILED=1
-                fi
-              fi
-            done
+	            for PORT in ${'$'}PORTS; do
+	              for PID in ${'$'}(find_server_pids "${'$'}PORT"); do
+	                kill_pid "${'$'}PID"
+	              done
+	            done
+
+	            for PORT in ${'$'}PORTS; do
+	              if ! port_is_free "${'$'}PORT"; then
+	                echo "PORT_STILL_LISTENING ${'$'}PORT"
+	                ps_lines | awk -v port="${'$'}PORT" '${'$'}0 ~ /python3/ && ${'$'}0 ~ /-m[[:space:]]+http\\.server/ && match(${'$'}0, "(^|[[:space:]])" port "([[:space:]]|${'$'})") { print ${'$'}0 }' | head -n 5 || true
+	                FAILED=1
+	              fi
+	            done
 
             if [ "${'$'}FAILED" -ne 0 ]; then
               exit 1
