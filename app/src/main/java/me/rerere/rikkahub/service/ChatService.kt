@@ -260,7 +260,12 @@ class ChatService(
         val conversation = conversationRepo.getConversationById(conversationId)
         if (conversation != null) {
             updateConversation(conversationId, conversation)
-            settingsStore.updateAssistant(conversation.assistantId)
+            val settings = settingsStore.settingsFlowRaw.first()
+            val shouldSwitchAssistant = conversation.source != ConversationSource.SCHEDULED_TASK &&
+                settings.getAssistantById(conversation.assistantId) != null
+            if (shouldSwitchAssistant) {
+                settingsStore.updateAssistant(conversation.assistantId)
+            }
         } else {
             // 新建对话, 并添加预设消息
             val currentSettings = settingsStore.settingsFlowRaw.first()

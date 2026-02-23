@@ -75,7 +75,7 @@ class ScheduledPromptWorker(
                     )
                 }
                 maybeNotifyFailure(task, run.id, error)
-                Result.success()
+                Result.retry()
             }
         )
     }
