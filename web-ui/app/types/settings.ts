@@ -16,6 +16,7 @@ export interface DisplaySetting {
   showLineNumbers: boolean;
   sendOnEnter: boolean;
   enableAutoScroll: boolean;
+  enableHtmlRendering?: boolean;
   fontSizeRatio: number;
   [key: string]: unknown;
 }

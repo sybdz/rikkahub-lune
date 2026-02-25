@@ -102,6 +102,26 @@ private val BLOCK_LATEX_REGEX = Regex("\\\\\\[(.+?)\\\\\\]", RegexOption.DOT_MAT
 val THINKING_REGEX = Regex("<think>([\\s\\S]*?)(?:</think>|$)", RegexOption.DOT_MATCHES_ALL)
 private val CODE_BLOCK_REGEX = Regex("```[\\s\\S]*?```|`[^`\n]*`", RegexOption.DOT_MATCHES_ALL)
 private val BREAK_LINE_REGEX = Regex("(?i)<br\\s*/?>")
+private val HTML_TAG_CANDIDATE_REGEX = Regex(
+    pattern = """
+        (?ix)
+        <\s*/?\s*(
+            html|body|div|p|h[1-6]|ul|ol|li|table|thead|tbody|tr|td|th|
+            details|summary|img|progress|blockquote|pre|code|span|a|br|hr
+        )\b
+    """.trimIndent()
+)
+
+private fun String.shouldRenderAsHtml(): Boolean {
+    val trimmed = trim()
+    if (trimmed.isEmpty() || !trimmed.contains('<') || !trimmed.contains('>')) {
+        return false
+    }
+    if (trimmed.startsWith("<!DOCTYPE", ignoreCase = true)) {
+        return true
+    }
+    return HTML_TAG_CANDIDATE_REGEX.containsMatchIn(trimmed)
+}
 
 // 预处理markdown内容
 private fun preProcess(content: String): String {
@@ -191,6 +211,18 @@ fun MarkdownBlock(
     style: TextStyle = LocalTextStyle.current,
     onClickCitation: (String) -> Unit = {}
 ) {
+    val enableHtmlRendering = LocalSettings.current.displaySetting.enableHtmlRendering
+    val shouldRenderAsHtml = remember(content, enableHtmlRendering) {
+        enableHtmlRendering && content.shouldRenderAsHtml()
+    }
+    if (shouldRenderAsHtml) {
+        SimpleHtmlBlock(
+            html = content,
+            modifier = modifier
+        )
+        return
+    }
+
     var (data, setData) = remember {
         val preprocessed = preProcess(content)
         val astTree = parser.buildMarkdownTreeFromString(preprocessed)
@@ -564,9 +596,17 @@ private fun MarkdownNode(
 
         MarkdownElementTypes.HTML_BLOCK -> {
             val text = node.getTextInNode(content)
-            SimpleHtmlBlock(
-                html = text, modifier = modifier
-            )
+            val enableHtmlRendering = LocalSettings.current.displaySetting.enableHtmlRendering
+            if (enableHtmlRendering) {
+                SimpleHtmlBlock(
+                    html = text, modifier = modifier
+                )
+            } else {
+                Text(
+                    text = text,
+                    modifier = modifier,
+                )
+            }
         }
 
         // 其他类型的节点，递归处理子节点

@@ -834,6 +834,8 @@
   <string name="setting_page_web_server_password_desc">网页界面访问所需的密码</string>
   <string name="setting_display_page_enable_latex_rendering_title">启用 LaTeX 渲染</string>
   <string name="setting_display_page_enable_latex_rendering_desc">使用 LaTeX 语法渲染数学表达式和公式</string>
+  <string name="setting_display_page_enable_html_rendering_title">启用 HTML 渲染</string>
+  <string name="setting_display_page_enable_html_rendering_desc">将聊天消息中的 HTML 标签按内容渲染，而不是显示原始标记</string>
   <string name="assistant_page_local_tools_termux_exec_title">Termux 命令</string>
   <string name="assistant_page_local_tools_termux_exec_desc">通过 termux_exec 工具在本地 Termux（com.termux）中执行命令</string>
   <string name="assistant_page_local_tools_termux_python_title">Termux Python</string>

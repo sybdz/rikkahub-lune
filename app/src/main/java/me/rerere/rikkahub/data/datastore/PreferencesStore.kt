@@ -595,6 +595,7 @@ data class DisplaySetting(
     val sendOnEnter: Boolean = false,
     val enableAutoScroll: Boolean = true,
     val enableLatexRendering: Boolean = true,
+    val enableHtmlRendering: Boolean = false,
 )
 
 @Serializable
