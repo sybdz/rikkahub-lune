@@ -5,6 +5,7 @@ import me.rerere.rikkahub.data.datastore.ThemeStudioConfig
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotEquals
 import org.junit.Assert.assertNotNull
+import org.junit.Assert.assertNull
 import org.junit.Test
 import kotlin.uuid.Uuid
 
@@ -48,5 +49,53 @@ class ThemeStudioSerializerTest {
         assertNotNull(imported)
         assertEquals("One", imported!!.name)
         assertNotEquals(profile.id, imported.id)
+    }
+
+    @Test
+    fun rawThemeStudioImportRejectsInvalidPayloadShape() {
+        assertNull(ThemeStudioConfigSerializer.tryImportThemeStudio("{}"))
+        assertNull(ThemeStudioConfigSerializer.tryImportThemeProfile("{}"))
+    }
+
+    @Test
+    fun rawThemeProfileJsonFallsBackToProfileImport() {
+        val rawProfileJson = ExportSerializer.DefaultJson.encodeToString(
+            ThemeProfile.serializer(),
+            ThemeProfile(
+                id = Uuid.random(),
+                name = "Raw profile",
+                basePresetId = "sakura",
+            )
+        )
+
+        val studio = ThemeStudioConfigSerializer.tryImportThemeStudio(rawProfileJson)
+        val profile = ThemeStudioConfigSerializer.tryImportThemeProfile(rawProfileJson)
+
+        assertNull(studio)
+        assertNotNull(profile)
+        assertEquals("Raw profile", profile!!.name)
+    }
+
+    @Test
+    fun rawThemeStudioJsonCanStillImport() {
+        val profile = ThemeProfile(
+            id = Uuid.random(),
+            name = "Raw studio",
+            basePresetId = "ocean",
+        )
+        val rawStudioJson = ExportSerializer.DefaultJson.encodeToString(
+            ThemeStudioConfig.serializer(),
+            ThemeStudioConfig(
+                activeProfileId = profile.id,
+                profiles = listOf(profile),
+            )
+        )
+
+        val imported = ThemeStudioConfigSerializer.tryImportThemeStudio(rawStudioJson)
+
+        assertNotNull(imported)
+        assertEquals(1, imported!!.profiles.size)
+        assertEquals("Raw studio", imported.profiles.first().name)
+        assertNotEquals(profile.id, imported.profiles.first().id)
     }
 }

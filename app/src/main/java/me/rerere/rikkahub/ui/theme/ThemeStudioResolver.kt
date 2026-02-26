@@ -33,10 +33,11 @@ fun resolveThemeStudio(
     val normalizedStudio = settings.themeStudio.ensureValid(settings.themeId)
     val activeProfile = (draftProfile ?: normalizedStudio.activeProfileOrDefault(settings.themeId))
         .normalized(fallbackPresetId = settings.themeId)
+    val presetId = draftProfile?.let { activeProfile.basePresetId } ?: settings.themeId
 
     val baseColorScheme = when {
         settings.dynamicColor && dynamicSchemeProvider != null -> dynamicSchemeProvider()
-        else -> presetSchemeProvider(activeProfile.basePresetId, darkTheme)
+        else -> presetSchemeProvider(presetId, darkTheme)
     }
 
     val blended = applyProfileColorBlend(

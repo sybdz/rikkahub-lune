@@ -148,6 +148,60 @@ class ThemeStudioResolverTest {
     }
 
     @Test
+    fun resolverUsesSelectedThemeIdAsBasePreset() {
+        val profile = ThemeProfile(
+            id = Uuid.random(),
+            basePresetId = "sakura",
+            colorBlend = 0f,
+        )
+        val settings = Settings(
+            dynamicColor = false,
+            themeId = "ocean",
+            themeStudio = ThemeStudioConfig(
+                activeProfileId = profile.id,
+                profiles = listOf(profile),
+            ),
+        )
+        val requestedPresetIds = mutableListOf<String>()
+
+        resolveThemeStudio(
+            settings = settings,
+            darkTheme = false,
+            dynamicSchemeProvider = null,
+            presetSchemeProvider = { presetId, dark ->
+                requestedPresetIds += presetId
+                findPresetTheme(presetId).getColorScheme(dark)
+            },
+        )
+
+        assertEquals(listOf("ocean"), requestedPresetIds)
+    }
+
+    @Test
+    fun resolverUsesDraftProfileBasePresetInStudioPreview() {
+        val settings = Settings(
+            dynamicColor = false,
+            themeId = "ocean",
+            themeStudio = ThemeStudioConfig(),
+        )
+        val requestedPresetIds = mutableListOf<String>()
+        val draftProfile = defaultBalancedThemeProfile("sakura")
+
+        resolveThemeStudio(
+            settings = settings,
+            darkTheme = false,
+            dynamicSchemeProvider = null,
+            presetSchemeProvider = { presetId, dark ->
+                requestedPresetIds += presetId
+                findPresetTheme(presetId).getColorScheme(dark)
+            },
+            draftProfile = draftProfile,
+        )
+
+        assertEquals(listOf("sakura"), requestedPresetIds)
+    }
+
+    @Test
     fun profileNormalizationClampsValues() {
         val normalized = ThemeProfile(
             basePresetId = "",

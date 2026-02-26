@@ -5,6 +5,7 @@ import android.net.Uri
 import android.provider.OpenableColumns
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.decodeFromJsonElement
@@ -242,6 +243,20 @@ object MessageTemplateSerializer : ExportSerializer<MessageInjectionTemplate> {
 
 object ThemeStudioConfigSerializer : ExportSerializer<ThemeStudioConfig> {
     override val type = "theme_studio"
+    private val rawThemeProfileKeys = setOf(
+        "id",
+        "name",
+        "basePresetId",
+        "colorBlend",
+        "primarySeedArgb",
+        "secondarySeedArgb",
+        "tertiarySeedArgb",
+        "gradient",
+        "glass",
+        "atmosphere",
+        "motion",
+        "roleTuning",
+    )
 
     override fun getExportFileName(data: ThemeStudioConfig): String {
         return "theme_studio.json"
@@ -279,11 +294,7 @@ object ThemeStudioConfigSerializer : ExportSerializer<ThemeStudioConfig> {
                 .decodeFromJsonElement<ThemeStudioConfig>(exportData.data)
                 .withNewProfileIds()
         }.getOrElse {
-            runCatching {
-                ExportSerializer.DefaultJson
-                    .decodeFromString(ThemeStudioConfig.serializer(), json)
-                    .withNewProfileIds()
-            }.getOrNull()
+            tryImportRawThemeStudio(json)
         }
     }
 
@@ -298,12 +309,32 @@ object ThemeStudioConfigSerializer : ExportSerializer<ThemeStudioConfig> {
                 .decodeFromJsonElement<ThemeProfile>(exportData.data)
                 .copy(id = Uuid.random())
         }.getOrElse {
-            runCatching {
-                ExportSerializer.DefaultJson
-                    .decodeFromString(ThemeProfile.serializer(), json)
-                    .copy(id = Uuid.random())
-            }.getOrNull()
+            tryImportRawThemeProfile(json)
         }
+    }
+
+    private fun tryImportRawThemeStudio(json: String): ThemeStudioConfig? {
+        val payload = runCatching { ExportSerializer.DefaultJson.parseToJsonElement(json) }.getOrNull()
+            as? JsonObject
+            ?: return null
+        if (payload["profiles"] !is JsonArray) return null
+        return runCatching {
+            ExportSerializer.DefaultJson
+                .decodeFromJsonElement<ThemeStudioConfig>(payload)
+                .withNewProfileIds()
+        }.getOrNull()
+    }
+
+    private fun tryImportRawThemeProfile(json: String): ThemeProfile? {
+        val payload = runCatching { ExportSerializer.DefaultJson.parseToJsonElement(json) }.getOrNull()
+            as? JsonObject
+            ?: return null
+        if (payload.keys.none(rawThemeProfileKeys::contains)) return null
+        return runCatching {
+            ExportSerializer.DefaultJson
+                .decodeFromJsonElement<ThemeProfile>(payload)
+                .copy(id = Uuid.random())
+        }.getOrNull()
     }
 
     private fun ThemeStudioConfig.withNewProfileIds(): ThemeStudioConfig {
