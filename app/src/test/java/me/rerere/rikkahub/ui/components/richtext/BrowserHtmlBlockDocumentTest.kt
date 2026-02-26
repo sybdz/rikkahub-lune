@@ -1,6 +1,7 @@
 package me.rerere.rikkahub.ui.components.richtext
 
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -86,6 +87,15 @@ class BrowserHtmlBlockDocumentTest {
         assertTrue(bootstrap.contains("new Uint8Array(binary.length)"))
         assertTrue(bootstrap.contains("new Blob([bytes], { type: 'text/html;charset=utf-8' })"))
         assertTrue(bootstrap.contains("new TextDecoder('utf-8').decode(bytes)"))
+    }
+
+    @Test
+    fun bridgeHeightScriptDoesNotUseViewportClientHeightAsBaseline() {
+        val rendered = buildBrowserHtmlDocument("<span>hello</span>")
+
+        assertFalse(rendered.contains("doc.clientHeight"))
+        assertFalse(rendered.contains("body.clientHeight"))
+        assertTrue(rendered.contains("docHeight <= viewportHeight + 1"))
     }
 
     @Test

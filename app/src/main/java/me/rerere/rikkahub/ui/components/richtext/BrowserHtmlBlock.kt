@@ -23,8 +23,8 @@ import org.jsoup.Jsoup
 import java.math.BigDecimal
 import java.util.Locale
 
-private const val MIN_HTML_BLOCK_HEIGHT = 120
-private const val DEFAULT_HTML_BLOCK_HEIGHT = 220
+private const val MIN_HTML_BLOCK_HEIGHT = 24
+private const val DEFAULT_HTML_BLOCK_HEIGHT = 120
 private const val VIEWPORT_HEIGHT_VARIABLE = "var(--TH-viewport-height)"
 private val VH_VALUE_REGEX = Regex("(\\d+(?:\\.\\d+)?)vh\\b", RegexOption.IGNORE_CASE)
 private val MIN_HEIGHT_DECLARATION_REGEX =
@@ -122,18 +122,35 @@ private const val HTML_HELPER_SCRIPT = """
       function getDocumentHeight() {
         var body = document.body;
         var doc = document.documentElement;
-        if (!body || !doc) {
+        if (!doc) {
           return 0;
         }
 
-        return Math.max(
-          body.scrollHeight || 0,
-          body.offsetHeight || 0,
-          body.clientHeight || 0,
-          doc.clientHeight || 0,
+        var bodyRectHeight = 0;
+        if (body && typeof body.getBoundingClientRect === 'function') {
+          bodyRectHeight = Math.ceil(body.getBoundingClientRect().height || 0);
+        }
+
+        var bodyHeight = Math.max(
+          body ? body.scrollHeight || 0 : 0,
+          body ? body.offsetHeight || 0 : 0,
+          bodyRectHeight
+        );
+
+        var docHeight = Math.max(
           doc.scrollHeight || 0,
           doc.offsetHeight || 0
         );
+
+        var viewportHeight = Math.ceil(
+          (window.visualViewport && window.visualViewport.height) || window.innerHeight || 0
+        );
+
+        if (bodyHeight > 0 && viewportHeight > 0 && docHeight <= viewportHeight + 1) {
+          return bodyHeight;
+        }
+
+        return Math.max(bodyHeight, docHeight);
       }
 
       function updateViewportHeightVariable() {
