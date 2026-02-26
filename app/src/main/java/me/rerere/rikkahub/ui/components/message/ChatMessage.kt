@@ -91,6 +91,7 @@ import me.rerere.rikkahub.ui.components.ui.ChainOfThought
 import me.rerere.rikkahub.ui.components.ui.Favicon
 import me.rerere.rikkahub.ui.context.LocalNavController
 import me.rerere.rikkahub.ui.context.LocalSettings
+import me.rerere.rikkahub.ui.theme.LocalAppMotion
 import me.rerere.rikkahub.ui.theme.extendColors
 import me.rerere.rikkahub.utils.JsonInstant
 import me.rerere.rikkahub.utils.base64Encode
@@ -120,6 +121,7 @@ fun ChatMessage(
     onToolApproval: ((toolCallId: String, approved: Boolean, reason: String) -> Unit)? = null,
 ) {
     val message = node.messages[node.selectIndex]
+    val appMotion = LocalAppMotion.current
     val settings = LocalSettings.current.displaySetting
     val textStyle = LocalTextStyle.current.copy(
         fontSize = LocalTextStyle.current.fontSize * settings.fontSizeRatio,
@@ -184,8 +186,14 @@ fun ChatMessage(
 
         AnimatedVisibility(
             visible = showActions,
-            enter = slideInVertically { it / 2 } + fadeIn(),
-            exit = slideOutVertically { it / 2 } + fadeOut()
+            enter = slideInVertically(
+                animationSpec = appMotion.tweenSpec(220),
+                initialOffsetY = { it / 2 },
+            ) + fadeIn(animationSpec = appMotion.tweenSpec(180)),
+            exit = slideOutVertically(
+                animationSpec = appMotion.tweenSpec(180),
+                targetOffsetY = { it / 2 },
+            ) + fadeOut(animationSpec = appMotion.tweenSpec(140))
         ) {
             Column(
                 modifier = Modifier.animateContentSize()

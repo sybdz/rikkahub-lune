@@ -29,6 +29,7 @@ import androidx.compose.material3.SwipeToDismissBoxValue
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
+import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -38,6 +39,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -53,6 +55,7 @@ import me.rerere.rikkahub.Screen
 import me.rerere.rikkahub.data.model.Conversation
 import me.rerere.rikkahub.ui.components.nav.BackButton
 import me.rerere.rikkahub.ui.context.LocalNavController
+import me.rerere.rikkahub.ui.theme.ThemeGlassContainer
 import me.rerere.rikkahub.utils.navigateToChatPage
 import me.rerere.rikkahub.utils.plus
 import me.rerere.rikkahub.utils.toLocalDateTime
@@ -69,33 +72,36 @@ fun HistoryPage(vm: HistoryVM = koinViewModel()) {
 
     Scaffold(
         topBar = {
-            TopAppBar(
-                title = {
-                    Text(stringResource(R.string.history_page_title))
-                },
-                navigationIcon = {
-                    BackButton()
-                },
-                actions = {
-                    IconButton(
-                        onClick = {
-                            navController.navigate(Screen.MessageSearch)
+            ThemeGlassContainer {
+                TopAppBar(
+                    title = {
+                        Text(stringResource(R.string.history_page_title))
+                    },
+                    colors = TopAppBarDefaults.topAppBarColors(containerColor = Color.Transparent),
+                    navigationIcon = {
+                        BackButton()
+                    },
+                    actions = {
+                        IconButton(
+                            onClick = {
+                                navController.navigate(Screen.MessageSearch)
+                            }
+                        ) {
+                            Icon(
+                                Lucide.ScanSearch,
+                                contentDescription = stringResource(R.string.history_page_search_messages)
+                            )
                         }
-                    ) {
-                        Icon(
-                            Lucide.ScanSearch,
-                            contentDescription = stringResource(R.string.history_page_search_messages)
-                        )
-                    }
-                    IconButton(
-                        onClick = {
-                            showDeleteAllDialog = true
+                        IconButton(
+                            onClick = {
+                                showDeleteAllDialog = true
+                            }
+                        ) {
+                            Icon(Lucide.Trash2, contentDescription = stringResource(R.string.history_page_delete_all))
                         }
-                    ) {
-                        Icon(Lucide.Trash2, contentDescription = stringResource(R.string.history_page_delete_all))
                     }
-                }
-            )
+                )
+            }
         },
         snackbarHost = {
             SnackbarHost(hostState = snackbarHostState)

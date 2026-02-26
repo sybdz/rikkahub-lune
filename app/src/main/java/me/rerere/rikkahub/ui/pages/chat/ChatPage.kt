@@ -71,6 +71,7 @@ import me.rerere.rikkahub.ui.context.LocalToaster
 import me.rerere.rikkahub.ui.hooks.ChatInputState
 import me.rerere.rikkahub.ui.hooks.EditStateContent
 import me.rerere.rikkahub.ui.hooks.useEditState
+import me.rerere.rikkahub.ui.theme.ThemeGlassContainer
 import me.rerere.rikkahub.utils.base64Decode
 import me.rerere.rikkahub.utils.navigateToChatPage
 import org.koin.androidx.compose.koinViewModel
@@ -262,121 +263,125 @@ private fun ChatPageContent(
         AssistantBackground(setting = setting)
         Scaffold(
             topBar = {
-                TopBar(
-                    settings = setting,
-                    conversation = conversation,
-                    bigScreen = bigScreen,
-                    drawerState = drawerState,
-                    previewMode = previewMode,
-                    onNewChat = {
-                        navigateToChatPage(navController)
-                    },
-                    onClickMenu = {
-                        previewMode = !previewMode
-                    },
-                    onUpdateTitle = {
-                        vm.updateTitle(it)
-                    }
-                )
+                ThemeGlassContainer {
+                    TopBar(
+                        settings = setting,
+                        conversation = conversation,
+                        bigScreen = bigScreen,
+                        drawerState = drawerState,
+                        previewMode = previewMode,
+                        onNewChat = {
+                            navigateToChatPage(navController)
+                        },
+                        onClickMenu = {
+                            previewMode = !previewMode
+                        },
+                        onUpdateTitle = {
+                            vm.updateTitle(it)
+                        }
+                    )
+                }
             },
             bottomBar = {
-                ChatInput(
-                    state = inputState,
-                    loading = loadingJob != null,
-                    settings = setting,
-                    conversation = conversation,
-                    mcpManager = vm.mcpManager,
-                    onCancelClick = {
-                        loadingJob?.cancel()
-                    },
-                    enableSearch = enableWebSearch,
-                    termuxCommandModeEnabled = setting.termuxCommandModeEnabled,
-                    onToggleSearch = {
-                        vm.updateSettings(setting.copy(enableWebSearch = !enableWebSearch))
-                    },
-                    onToggleTermuxCommandMode = {
-                        vm.updateSettings(setting.copy(termuxCommandModeEnabled = it))
-                    },
-                    onSendClick = {
-                        val contents = inputState.getContents()
-                        val termuxDirect = if (inputState.isEditing()) {
-                            null
-                        } else {
-                            TermuxDirectCommandParser.parse(
-                                parts = contents,
-                                commandModeEnabled = setting.termuxCommandModeEnabled
-                            )
-                        }
+                ThemeGlassContainer {
+                    ChatInput(
+                        state = inputState,
+                        loading = loadingJob != null,
+                        settings = setting,
+                        conversation = conversation,
+                        mcpManager = vm.mcpManager,
+                        onCancelClick = {
+                            loadingJob?.cancel()
+                        },
+                        enableSearch = enableWebSearch,
+                        termuxCommandModeEnabled = setting.termuxCommandModeEnabled,
+                        onToggleSearch = {
+                            vm.updateSettings(setting.copy(enableWebSearch = !enableWebSearch))
+                        },
+                        onToggleTermuxCommandMode = {
+                            vm.updateSettings(setting.copy(termuxCommandModeEnabled = it))
+                        },
+                        onSendClick = {
+                            val contents = inputState.getContents()
+                            val termuxDirect = if (inputState.isEditing()) {
+                                null
+                            } else {
+                                TermuxDirectCommandParser.parse(
+                                    parts = contents,
+                                    commandModeEnabled = setting.termuxCommandModeEnabled
+                                )
+                            }
 
-                        if (currentChatModel == null && termuxDirect?.isDirect != true) {
-                            toaster.show("请先选择模型", type = ToastType.Error)
-                            return@ChatInput
-                        }
-                        if (inputState.isEditing()) {
-                            vm.handleMessageEdit(
-                                parts = contents,
-                                messageId = inputState.editingMessage!!,
-                            )
-                        } else {
-                            vm.handleMessageSend(
-                                content = contents,
-                                forceTermuxCommandMode = setting.termuxCommandModeEnabled
-                            )
-                            scope.launch {
-                                chatListState.requestScrollToItem(conversation.currentMessages.size + 5)
+                            if (currentChatModel == null && termuxDirect?.isDirect != true) {
+                                toaster.show("请先选择模型", type = ToastType.Error)
+                                return@ChatInput
                             }
-                        }
-                        inputState.clearInput()
-                    },
-                    onLongSendClick = {
-                        val contents = inputState.getContents()
-                        if (inputState.isEditing()) {
-                            vm.handleMessageEdit(
-                                parts = contents,
-                                messageId = inputState.editingMessage!!,
-                            )
-                        } else {
-                            vm.handleMessageSend(
-                                content = contents,
-                                answer = false,
-                                forceTermuxCommandMode = setting.termuxCommandModeEnabled
-                            )
-                            scope.launch {
-                                chatListState.requestScrollToItem(conversation.currentMessages.size + 5)
-                            }
-                        }
-                        inputState.clearInput()
-                    },
-                    onUpdateChatModel = {
-                        vm.setChatModel(assistant = setting.getCurrentAssistant(), model = it)
-                    },
-                    onUpdateAssistant = {
-                        vm.updateSettings(
-                            setting.copy(
-                                assistants = setting.assistants.map { assistant ->
-                                    if (assistant.id == it.id) {
-                                        it
-                                    } else {
-                                        assistant
-                                    }
+                            if (inputState.isEditing()) {
+                                vm.handleMessageEdit(
+                                    parts = contents,
+                                    messageId = inputState.editingMessage!!,
+                                )
+                            } else {
+                                vm.handleMessageSend(
+                                    content = contents,
+                                    forceTermuxCommandMode = setting.termuxCommandModeEnabled
+                                )
+                                scope.launch {
+                                    chatListState.requestScrollToItem(conversation.currentMessages.size + 5)
                                 }
+                            }
+                            inputState.clearInput()
+                        },
+                        onLongSendClick = {
+                            val contents = inputState.getContents()
+                            if (inputState.isEditing()) {
+                                vm.handleMessageEdit(
+                                    parts = contents,
+                                    messageId = inputState.editingMessage!!,
+                                )
+                            } else {
+                                vm.handleMessageSend(
+                                    content = contents,
+                                    answer = false,
+                                    forceTermuxCommandMode = setting.termuxCommandModeEnabled
+                                )
+                                scope.launch {
+                                    chatListState.requestScrollToItem(conversation.currentMessages.size + 5)
+                                }
+                            }
+                            inputState.clearInput()
+                        },
+                        onUpdateChatModel = {
+                            vm.setChatModel(assistant = setting.getCurrentAssistant(), model = it)
+                        },
+                        onUpdateAssistant = {
+                            vm.updateSettings(
+                                setting.copy(
+                                    assistants = setting.assistants.map { assistant ->
+                                        if (assistant.id == it.id) {
+                                            it
+                                        } else {
+                                            assistant
+                                        }
+                                    }
+                                )
                             )
-                        )
-                    },
-                    onUpdateSearchService = { index ->
-                        vm.updateSettings(
-                            setting.copy(
-                                searchServiceSelected = index
+                        },
+                        onUpdateSearchService = { index ->
+                            vm.updateSettings(
+                                setting.copy(
+                                    searchServiceSelected = index
+                                )
                             )
-                        )
-                    },
-                    onClearContext = {
-                        vm.handleMessageTruncate()
-                    },
-                    onCompressContext = { additionalPrompt, targetTokens, keepRecentMessages ->
-                        vm.handleCompressContext(additionalPrompt, targetTokens, keepRecentMessages)
-                    },
-                )
+                        },
+                        onClearContext = {
+                            vm.handleMessageTruncate()
+                        },
+                        onCompressContext = { additionalPrompt, targetTokens, keepRecentMessages ->
+                            vm.handleCompressContext(additionalPrompt, targetTokens, keepRecentMessages)
+                        },
+                    )
+                }
             },
             containerColor = Color.Transparent,
         ) { innerPadding ->

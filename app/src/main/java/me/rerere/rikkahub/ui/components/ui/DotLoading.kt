@@ -18,6 +18,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import me.rerere.rikkahub.ui.theme.LocalAppMotion
 
 @Preview
 @Composable
@@ -27,12 +28,18 @@ fun DotLoading(
     animationDuration: Int = 600,
     size: Dp = 16.dp,
 ) {
+    val appMotion = LocalAppMotion.current
     val infiniteTransition = rememberInfiniteTransition(label = "dot_loading")
     val alpha by infiniteTransition.animateFloat(
         initialValue = 0.3f,
         targetValue = 1f,
         animationSpec = infiniteRepeatable(
-            animation = tween(durationMillis = animationDuration),
+            animation = tween(
+                durationMillis = appMotion.duration(
+                    baseDurationMillis = animationDuration,
+                    isExempt = true,
+                )
+            ),
             repeatMode = RepeatMode.Reverse
         ),
         label = "dot_alpha"

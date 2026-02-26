@@ -50,6 +50,7 @@ import com.composables.icons.lucide.Lucide
 import com.composables.icons.lucide.X
 import me.rerere.rikkahub.R
 import me.rerere.rikkahub.ui.components.richtext.MarkdownBlock
+import me.rerere.rikkahub.ui.theme.LocalAppMotion
 import java.util.Locale
 
 @Composable
@@ -175,6 +176,7 @@ fun CollapsibleTranslationText(
     onClickCitation: (String) -> Unit
 ) {
     if (content.isNotBlank()) {
+        val appMotion = LocalAppMotion.current
         var isCollapsed by remember { mutableStateOf(false) }
 
         Spacer(modifier = Modifier.height(12.dp))
@@ -227,8 +229,12 @@ fun CollapsibleTranslationText(
         // Translation content (collapsible)
         AnimatedVisibility(
             visible = !isCollapsed,
-            enter = expandVertically() + fadeIn(),
-            exit = shrinkVertically() + fadeOut()
+            enter = expandVertically(
+                animationSpec = appMotion.tweenSpec(220),
+            ) + fadeIn(animationSpec = appMotion.tweenSpec(180)),
+            exit = shrinkVertically(
+                animationSpec = appMotion.tweenSpec(180),
+            ) + fadeOut(animationSpec = appMotion.tweenSpec(140)),
         ) {
             Card(
                 modifier = Modifier
@@ -262,7 +268,13 @@ fun CollapsibleTranslationText(
                             initialValue = 0.3f,
                             targetValue = 1f,
                             animationSpec = infiniteRepeatable(
-                                animation = tween(1000, easing = LinearEasing),
+                                animation = tween(
+                                    durationMillis = appMotion.duration(
+                                        baseDurationMillis = 1000,
+                                        isExempt = true,
+                                    ),
+                                    easing = LinearEasing,
+                                ),
                                 repeatMode = RepeatMode.Reverse
                             ),
                             label = "alpha"

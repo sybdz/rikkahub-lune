@@ -98,6 +98,7 @@ import me.rerere.rikkahub.ui.components.ui.ListSelectableItem
 import me.rerere.rikkahub.ui.components.ui.RabbitLoadingIndicator
 import me.rerere.rikkahub.ui.components.ui.Tooltip
 import me.rerere.rikkahub.ui.hooks.ImeLazyListAutoScroller
+import me.rerere.rikkahub.ui.theme.LocalAppMotion
 import me.rerere.rikkahub.utils.plus
 import kotlin.uuid.Uuid
 
@@ -136,11 +137,19 @@ fun ChatList(
     onToolApproval: ((toolCallId: String, approved: Boolean, reason: String) -> Unit)? = null,
     onToggleFavorite: ((MessageNode) -> Unit)? = null,
 ) {
+    val appMotion = LocalAppMotion.current
     AnimatedContent(
         targetState = previewMode,
         label = "ChatListMode",
         transitionSpec = {
-            (fadeIn() + scaleIn(initialScale = 0.8f) togetherWith fadeOut() + scaleOut(targetScale = 0.8f))
+            (
+                fadeIn(animationSpec = appMotion.tweenSpec(220)) +
+                    scaleIn(initialScale = 0.8f, animationSpec = appMotion.tweenSpec(220))
+                ) togetherWith
+                (
+                    fadeOut(animationSpec = appMotion.tweenSpec(160)) +
+                        scaleOut(targetScale = 0.8f, animationSpec = appMotion.tweenSpec(160))
+                    )
         }
     ) { target ->
         if (target) {
@@ -199,6 +208,7 @@ private fun ChatListNormal(
     onToolApproval: ((toolCallId: String, approved: Boolean, reason: String) -> Unit)? = null,
     onToggleFavorite: ((MessageNode) -> Unit)? = null,
 ) {
+    val appMotion = LocalAppMotion.current
     val scope = rememberCoroutineScope()
     val loadingState by rememberUpdatedState(loading)
     var isRecentScroll by remember { mutableStateOf(false) }
@@ -384,9 +394,11 @@ private fun ChatListNormal(
                     .align(Alignment.BottomCenter)
                     .offset(y = -(48).dp),
                 enter = slideInVertically(
+                    animationSpec = appMotion.tweenSpec(240),
                     initialOffsetY = { it * 2 },
                 ),
                 exit = slideOutVertically(
+                    animationSpec = appMotion.tweenSpec(200),
                     targetOffsetY = { it * 2 },
                 ),
             ) {
@@ -700,13 +712,16 @@ private fun BoxScope.MessageJumper(
     scope: CoroutineScope,
     state: LazyListState
 ) {
+    val appMotion = LocalAppMotion.current
     AnimatedVisibility(
         visible = show,
         modifier = Modifier.align(if (onLeft) Alignment.CenterStart else Alignment.CenterEnd),
         enter = slideInHorizontally(
+            animationSpec = appMotion.tweenSpec(220),
             initialOffsetX = { if (onLeft) -it * 2 else it * 2 },
         ),
         exit = slideOutHorizontally(
+            animationSpec = appMotion.tweenSpec(180),
             targetOffsetX = { if (onLeft) -it * 2 else it * 2 },
         )
     ) {

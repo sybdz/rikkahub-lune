@@ -10,6 +10,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.ReadOnlyComposable
 import androidx.compose.runtime.SideEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.compositionLocalOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
@@ -42,6 +43,7 @@ fun RikkahubTheme(
     content: @Composable () -> Unit
 ) {
     val settings by rememberUserSettingsState()
+    val draftThemeProfile by ThemeStudioDraftStore.draftProfile.collectAsState()
 
     val colorMode by rememberColorMode()
     val darkTheme = when (colorMode) {
@@ -50,23 +52,38 @@ fun RikkahubTheme(
         ColorMode.DARK -> true
     }
     val amoledDarkMode by rememberAmoledDarkMode()
+    val context = LocalContext.current
 
-    val colorScheme = when {
-        settings.dynamicColor && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S -> {
-            val context = LocalContext.current
-            if (darkTheme) dynamicDarkColorScheme(context) else dynamicLightColorScheme(context)
-        }
-        darkTheme -> findPresetTheme(settings.themeId).getColorScheme(dark = true)
-        else -> findPresetTheme(settings.themeId).getColorScheme(dark = false)
+    val resolvedTheme = remember(settings, draftThemeProfile, darkTheme, context) {
+        resolveThemeStudio(
+            settings = settings,
+            darkTheme = darkTheme,
+            dynamicSchemeProvider = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                {
+                    if (darkTheme) {
+                        dynamicDarkColorScheme(context)
+                    } else {
+                        dynamicLightColorScheme(context)
+                    }
+                }
+            } else {
+                null
+            },
+            presetSchemeProvider = { presetId, dark ->
+                findPresetTheme(presetId).getColorScheme(dark)
+            },
+            draftProfile = draftThemeProfile,
+        )
     }
-    val colorSchemeConverted = remember(darkTheme, amoledDarkMode, colorScheme) {
+
+    val colorSchemeConverted = remember(darkTheme, amoledDarkMode, resolvedTheme.colorScheme) {
         if (darkTheme && amoledDarkMode) {
-            colorScheme.copy(
+            resolvedTheme.colorScheme.copy(
                 background = AMOLED_DARK_BACKGROUND,
                 surface = AMOLED_DARK_BACKGROUND,
             )
         } else {
-            colorScheme
+            resolvedTheme.colorScheme
         }
     }
     val extendColors = if (darkTheme) ExtendDarkColors else ExtendLightColors
@@ -85,7 +102,9 @@ fun RikkahubTheme(
 
     CompositionLocalProvider(
         LocalDarkMode provides darkTheme,
-        LocalExtendColors provides extendColors
+        LocalExtendColors provides extendColors,
+        LocalThemeEffects provides resolvedTheme.effects,
+        LocalAppMotion provides resolvedTheme.motion,
     ) {
         MaterialTheme(
             colorScheme = colorSchemeConverted,

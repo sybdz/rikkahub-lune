@@ -95,6 +95,7 @@ import me.rerere.rikkahub.ui.pages.setting.SettingProviderDetailPage
 import me.rerere.rikkahub.ui.pages.setting.SettingProviderPage
 import me.rerere.rikkahub.ui.pages.setting.SettingSearchPage
 import me.rerere.rikkahub.ui.pages.setting.SettingScheduledTaskPage
+import me.rerere.rikkahub.ui.pages.setting.SettingThemeStudioPage
 import me.rerere.rikkahub.ui.pages.setting.SettingTTSPage
 import me.rerere.rikkahub.ui.pages.setting.SettingTermuxPage
 import me.rerere.rikkahub.ui.pages.setting.SettingWebPage
@@ -104,7 +105,9 @@ import me.rerere.rikkahub.ui.pages.scheduled.ScheduledTaskRunsPage
 import me.rerere.rikkahub.ui.pages.translator.TranslatorPage
 import me.rerere.rikkahub.ui.pages.webview.WebViewPage
 import me.rerere.rikkahub.ui.theme.LocalDarkMode
+import me.rerere.rikkahub.ui.theme.LocalAppMotion
 import me.rerere.rikkahub.ui.theme.RikkahubTheme
+import me.rerere.rikkahub.ui.theme.ThemeAtmosphereLayer
 import androidx.compose.foundation.layout.Arrangement
 import me.rerere.rikkahub.data.db.DatabaseMigrationTracker
 import me.rerere.rikkahub.data.event.AppEventBus
@@ -254,11 +257,13 @@ class RouteActivity : ComponentActivity() {
                     showCloseButton = true,
                 )
                 TTSController()
+                val appMotion = LocalAppMotion.current
                 Box(
                     modifier = Modifier
                         .fillMaxSize()
                         .background(MaterialTheme.colorScheme.background)
                 ) {
+                    ThemeAtmosphereLayer(modifier = Modifier.fillMaxSize())
                     NavDisplay(
                         backStack = backStack,
                         entryDecorators = listOf(
@@ -268,24 +273,46 @@ class RouteActivity : ComponentActivity() {
                         modifier = Modifier.fillMaxSize(),
                         onBack = { backStack.removeLastOrNull() },
                         transitionSpec = {
-                            if (backStack.size == 1) fadeIn() togetherWith fadeOut()
-                            else {
-                                slideInHorizontally { it } togetherWith
-                                    slideOutHorizontally { -it / 2 } + scaleOut(targetScale = 0.7f) + fadeOut()
+                            if (backStack.size == 1) {
+                                fadeIn(animationSpec = appMotion.tweenSpec(220)) togetherWith
+                                    fadeOut(animationSpec = appMotion.tweenSpec(160))
+                            } else {
+                                slideInHorizontally(animationSpec = appMotion.tweenSpec(320)) { it } togetherWith
+                                    (
+                                        slideOutHorizontally(animationSpec = appMotion.tweenSpec(260)) { -it / 2 } +
+                                            scaleOut(
+                                                targetScale = 0.7f,
+                                                animationSpec = appMotion.tweenSpec(260),
+                                            ) +
+                                            fadeOut(animationSpec = appMotion.tweenSpec(180))
+                                        )
                             }
                         },
                         popTransitionSpec = {
-                            slideInHorizontally { -it / 2 } + scaleIn(initialScale = 0.7f) + fadeIn() togetherWith
-                                slideOutHorizontally { it }
+                            (
+                                slideInHorizontally(animationSpec = appMotion.tweenSpec(280)) { -it / 2 } +
+                                    scaleIn(initialScale = 0.7f, animationSpec = appMotion.tweenSpec(280)) +
+                                    fadeIn(animationSpec = appMotion.tweenSpec(180))
+                                ) togetherWith
+                                slideOutHorizontally(animationSpec = appMotion.tweenSpec(320)) { it }
                         },
                         predictivePopTransitionSpec = {
-                            slideInHorizontally { -it / 2 } + scaleIn(initialScale = 0.7f) + fadeIn() togetherWith
-                                slideOutHorizontally { it }
+                            (
+                                slideInHorizontally(animationSpec = appMotion.tweenSpec(280)) { -it / 2 } +
+                                    scaleIn(initialScale = 0.7f, animationSpec = appMotion.tweenSpec(280)) +
+                                    fadeIn(animationSpec = appMotion.tweenSpec(180))
+                                ) togetherWith
+                                slideOutHorizontally(animationSpec = appMotion.tweenSpec(320)) { it }
                         },
                         entryProvider = entryProvider {
                             entry<Screen.Chat>(
-                                metadata = NavDisplay.transitionSpec { fadeIn() togetherWith fadeOut() }
-                                        + NavDisplay.popTransitionSpec { fadeIn() togetherWith fadeOut() }
+                                metadata = NavDisplay.transitionSpec {
+                                    fadeIn(animationSpec = appMotion.tweenSpec(220)) togetherWith
+                                        fadeOut(animationSpec = appMotion.tweenSpec(180))
+                                } + NavDisplay.popTransitionSpec {
+                                    fadeIn(animationSpec = appMotion.tweenSpec(220)) togetherWith
+                                        fadeOut(animationSpec = appMotion.tweenSpec(180))
+                                }
                             ) { key ->
                                 ChatPage(
                                     id = Uuid.parse(key.id),
@@ -368,6 +395,10 @@ class RouteActivity : ComponentActivity() {
 
                             entry<Screen.SettingDisplay> {
                                 SettingDisplayPage()
+                            }
+
+                            entry<Screen.SettingThemeStudio> {
+                                SettingThemeStudioPage()
                             }
 
                             entry<Screen.SettingProvider> {
@@ -561,6 +592,9 @@ sealed interface Screen : NavKey {
 
     @Serializable
     data object SettingDisplay : Screen
+
+    @Serializable
+    data object SettingThemeStudio : Screen
 
     @Serializable
     data object SettingProvider : Screen

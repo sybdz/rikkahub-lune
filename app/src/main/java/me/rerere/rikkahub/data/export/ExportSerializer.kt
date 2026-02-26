@@ -9,6 +9,8 @@ import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.decodeFromJsonElement
 import kotlinx.serialization.json.encodeToJsonElement
+import me.rerere.rikkahub.data.datastore.ThemeProfile
+import me.rerere.rikkahub.data.datastore.ThemeStudioConfig
 import me.rerere.rikkahub.data.model.InjectionPosition
 import me.rerere.rikkahub.data.model.Lorebook
 import me.rerere.rikkahub.data.model.MessageInjectionTemplate
@@ -235,6 +237,108 @@ object MessageTemplateSerializer : ExportSerializer<MessageInjectionTemplate> {
                 .decodeFromJsonElement<MessageInjectionTemplate>(obj)
                 .withNewNodeIds()
         }.getOrNull()
+    }
+}
+
+object ThemeStudioConfigSerializer : ExportSerializer<ThemeStudioConfig> {
+    override val type = "theme_studio"
+
+    override fun getExportFileName(data: ThemeStudioConfig): String {
+        return "theme_studio.json"
+    }
+
+    override fun export(data: ThemeStudioConfig): ExportData {
+        return ExportData(
+            type = type,
+            data = ExportSerializer.DefaultJson.encodeToJsonElement(data)
+        )
+    }
+
+    override fun import(context: Context, uri: Uri): Result<ThemeStudioConfig> {
+        return runCatching {
+            val json = readUri(context, uri)
+            tryImportThemeStudio(json)
+                ?: tryImportThemeProfile(json)?.let { profile ->
+                    ThemeStudioConfig(
+                        activeProfileId = profile.id,
+                        profiles = listOf(profile),
+                    )
+                }
+                ?: throw IllegalArgumentException("Unsupported format")
+        }
+    }
+
+    internal fun tryImportThemeStudio(json: String): ThemeStudioConfig? {
+        return runCatching {
+            val exportData = ExportSerializer.DefaultJson.decodeFromString(
+                ExportData.serializer(),
+                json
+            )
+            if (exportData.type != type) return null
+            ExportSerializer.DefaultJson
+                .decodeFromJsonElement<ThemeStudioConfig>(exportData.data)
+                .withNewProfileIds()
+        }.getOrElse {
+            runCatching {
+                ExportSerializer.DefaultJson
+                    .decodeFromString(ThemeStudioConfig.serializer(), json)
+                    .withNewProfileIds()
+            }.getOrNull()
+        }
+    }
+
+    internal fun tryImportThemeProfile(json: String): ThemeProfile? {
+        return runCatching {
+            val exportData = ExportSerializer.DefaultJson.decodeFromString(
+                ExportData.serializer(),
+                json
+            )
+            if (exportData.type != ThemeProfileSerializer.type) return null
+            ExportSerializer.DefaultJson
+                .decodeFromJsonElement<ThemeProfile>(exportData.data)
+                .copy(id = Uuid.random())
+        }.getOrElse {
+            runCatching {
+                ExportSerializer.DefaultJson
+                    .decodeFromString(ThemeProfile.serializer(), json)
+                    .copy(id = Uuid.random())
+            }.getOrNull()
+        }
+    }
+
+    private fun ThemeStudioConfig.withNewProfileIds(): ThemeStudioConfig {
+        val idMapping = profiles.associate { it.id to Uuid.random() }
+        val remappedProfiles = profiles.map { profile ->
+            profile.copy(id = idMapping.getValue(profile.id))
+        }
+        val remappedActive = activeProfileId?.let { idMapping[it] } ?: remappedProfiles.firstOrNull()?.id
+        return copy(
+            activeProfileId = remappedActive,
+            profiles = remappedProfiles,
+        )
+    }
+}
+
+object ThemeProfileSerializer : ExportSerializer<ThemeProfile> {
+    override val type = "theme_profile"
+
+    override fun getExportFileName(data: ThemeProfile): String {
+        return "${data.name.ifBlank { type }}.json"
+    }
+
+    override fun export(data: ThemeProfile): ExportData {
+        return ExportData(
+            type = type,
+            data = ExportSerializer.DefaultJson.encodeToJsonElement(data)
+        )
+    }
+
+    override fun import(context: Context, uri: Uri): Result<ThemeProfile> {
+        return runCatching {
+            val json = readUri(context, uri)
+            ThemeStudioConfigSerializer.tryImportThemeProfile(json)
+                ?: throw IllegalArgumentException("Unsupported format")
+        }
     }
 }
 

@@ -203,6 +203,7 @@ dependencies {
 
     // ucrop
     implementation(libs.ucrop)
+    implementation(libs.material.color.utilities)
 
     // pebble (template engine)
     implementation(libs.pebble)

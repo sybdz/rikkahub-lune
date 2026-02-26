@@ -47,6 +47,7 @@ import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
+import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.material3.rememberSwipeToDismissBoxState
 import androidx.compose.runtime.Composable
@@ -59,6 +60,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.input.KeyboardType
@@ -96,6 +98,7 @@ import me.rerere.rikkahub.ui.components.ui.Tag
 import me.rerere.rikkahub.ui.components.ui.TagType
 import me.rerere.rikkahub.ui.context.LocalToaster
 import me.rerere.rikkahub.ui.hooks.useEditState
+import me.rerere.rikkahub.ui.theme.ThemeGlassContainer
 import me.rerere.rikkahub.utils.plus
 import org.koin.androidx.compose.koinViewModel
 import sh.calvin.reorderable.ReorderableItem
@@ -109,10 +112,13 @@ fun PromptPage(vm: PromptVM = koinViewModel()) {
 
     Scaffold(
         topBar = {
-            TopAppBar(
-                navigationIcon = { BackButton() },
-                title = { Text(stringResource(R.string.prompt_page_title)) }
-            )
+            ThemeGlassContainer {
+                TopAppBar(
+                    navigationIcon = { BackButton() },
+                    title = { Text(stringResource(R.string.prompt_page_title)) },
+                    colors = TopAppBarDefaults.topAppBarColors(containerColor = Color.Transparent),
+                )
+            }
         },
         bottomBar = {
             NavigationBar {

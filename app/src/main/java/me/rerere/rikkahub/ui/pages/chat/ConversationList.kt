@@ -1,6 +1,10 @@
 package me.rerere.rikkahub.ui.pages.chat
 
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.scaleIn
+import androidx.compose.animation.scaleOut
 import androidx.compose.foundation.LocalIndication
 import androidx.compose.foundation.background
 import androidx.compose.foundation.combinedClickable
@@ -50,6 +54,7 @@ import com.composables.icons.lucide.RefreshCw
 import com.composables.icons.lucide.Trash2
 import me.rerere.rikkahub.R
 import me.rerere.rikkahub.data.model.Conversation
+import me.rerere.rikkahub.ui.theme.LocalAppMotion
 import me.rerere.rikkahub.ui.theme.extendColors
 import me.rerere.rikkahub.utils.toLocalString
 import java.time.LocalDate
@@ -229,6 +234,7 @@ private fun ConversationItem(
     onMoveToAssistant: (Conversation) -> Unit = {},
     onClick: (Conversation) -> Unit
 ) {
+    val appMotion = LocalAppMotion.current
     val interactionSource = remember { MutableInteractionSource() }
     val backgroundColor = if (selected) {
         MaterialTheme.colorScheme.surfaceColorAtElevation(8.dp)
@@ -265,7 +271,17 @@ private fun ConversationItem(
             Spacer(Modifier.weight(1f))
 
             // 置顶图标
-            AnimatedVisibility(conversation.isPinned) {
+            AnimatedVisibility(
+                visible = conversation.isPinned,
+                enter = fadeIn(animationSpec = appMotion.tweenSpec(180)) + scaleIn(
+                    initialScale = 0.85f,
+                    animationSpec = appMotion.tweenSpec(200),
+                ),
+                exit = fadeOut(animationSpec = appMotion.tweenSpec(140)) + scaleOut(
+                    targetScale = 0.75f,
+                    animationSpec = appMotion.tweenSpec(160),
+                ),
+            ) {
                 Icon(
                     imageVector = Lucide.Pin,
                     contentDescription = "Pinned",
@@ -273,7 +289,17 @@ private fun ConversationItem(
                     tint = MaterialTheme.colorScheme.primary
                 )
             }
-            AnimatedVisibility(loading) {
+            AnimatedVisibility(
+                visible = loading,
+                enter = fadeIn(animationSpec = appMotion.tweenSpec(160)) + scaleIn(
+                    initialScale = 0.8f,
+                    animationSpec = appMotion.tweenSpec(180),
+                ),
+                exit = fadeOut(animationSpec = appMotion.tweenSpec(120)) + scaleOut(
+                    targetScale = 0.8f,
+                    animationSpec = appMotion.tweenSpec(140),
+                ),
+            ) {
                 Box(
                     modifier = Modifier
                         .clip(CircleShape)

@@ -51,6 +51,11 @@ import kotlin.uuid.Uuid
 
 private const val TAG = "PreferencesStore"
 
+private data class NormalizedSettingsResult(
+    val settings: Settings,
+    val themeStudioNeedsPersist: Boolean,
+)
+
 private val Context.settingsStore by preferencesDataStore(
     name = "settings",
     produceMigrations = { context ->
@@ -72,6 +77,7 @@ class SettingsStore(
         // UI设置
         val DYNAMIC_COLOR = booleanPreferencesKey("dynamic_color")
         val THEME_ID = stringPreferencesKey("theme_id")
+        val THEME_STUDIO = stringPreferencesKey("theme_studio")
         val DISPLAY_SETTING = stringPreferencesKey("display_setting")
         val DEVELOPER_MODE = booleanPreferencesKey("developer_mode")
 
@@ -189,6 +195,10 @@ class SettingsStore(
                 assistants = JsonInstant.decodeFromString(preferences[ASSISTANTS] ?: "[]"),
                 dynamicColor = preferences[DYNAMIC_COLOR] != false,
                 themeId = preferences[THEME_ID] ?: PresetThemes[0].id,
+                themeStudio = preferences[THEME_STUDIO]?.let {
+                    runCatching { JsonInstant.decodeFromString<ThemeStudioConfig>(it) }
+                        .getOrDefault(ThemeStudioConfig())
+                } ?: ThemeStudioConfig(),
                 developerMode = preferences[DEVELOPER_MODE] == true,
                 displaySetting = JsonInstant.decodeFromString(preferences[DISPLAY_SETTING] ?: "{}"),
                 scheduledTasks = preferences[SCHEDULED_TASKS]?.let {
@@ -357,9 +367,22 @@ class SettingsStore(
                     },
             )
         }
-        .onEach {
+        .map { settings ->
+            val normalizedThemeStudio = settings.themeStudio.ensureValid(settings.themeId)
+            NormalizedSettingsResult(
+                settings = settings.copy(themeStudio = normalizedThemeStudio),
+                themeStudioNeedsPersist = normalizedThemeStudio != settings.themeStudio,
+            )
+        }
+        .onEach { normalized ->
+            if (normalized.themeStudioNeedsPersist) {
+                dataStore.edit { preferences ->
+                    preferences[THEME_STUDIO] = JsonInstant.encodeToString(normalized.settings.themeStudio)
+                }
+            }
             get<PebbleEngine>().templateCache.invalidateAll()
         }
+        .map { it.settings }
 
     val settingsFlow = settingsFlowRaw
         .distinctUntilChanged()
@@ -374,6 +397,7 @@ class SettingsStore(
         dataStore.edit { preferences ->
             preferences[DYNAMIC_COLOR] = settings.dynamicColor
             preferences[THEME_ID] = settings.themeId
+            preferences[THEME_STUDIO] = JsonInstant.encodeToString(settings.themeStudio)
             preferences[DEVELOPER_MODE] = settings.developerMode
             preferences[DISPLAY_SETTING] = JsonInstant.encodeToString(settings.displaySetting)
 
@@ -511,6 +535,7 @@ data class Settings(
     val init: Boolean = false,
     val dynamicColor: Boolean = true,
     val themeId: String = PresetThemes[0].id,
+    val themeStudio: ThemeStudioConfig = ThemeStudioConfig(),
     val developerMode: Boolean = false,
     val displaySetting: DisplaySetting = DisplaySetting(),
     val enableWebSearch: Boolean = false,

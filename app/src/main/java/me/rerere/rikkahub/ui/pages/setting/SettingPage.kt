@@ -75,6 +75,7 @@ import me.rerere.rikkahub.ui.context.LocalNavController
 import me.rerere.rikkahub.ui.hooks.rememberColorMode
 import me.rerere.rikkahub.ui.pages.setting.components.PresetThemeButtonGroup
 import me.rerere.rikkahub.ui.theme.ColorMode
+import me.rerere.rikkahub.ui.theme.ThemeGlassContainer
 import me.rerere.rikkahub.utils.joinQQGroup
 import me.rerere.rikkahub.utils.openUrl
 import me.rerere.rikkahub.utils.plus
@@ -116,26 +117,29 @@ fun SettingPage(vm: SettingVM = koinViewModel()) {
 
     Scaffold(
         topBar = {
-            LargeTopAppBar(
-                title = {
-                    Text(text = stringResource(R.string.settings))
-                },
-                navigationIcon = {
-                    BackButton()
-                },
-                scrollBehavior = scrollBehavior,
-                actions = {
-                    if(settings.developerMode) {
-                        IconButton(
-                            onClick = {
-                                navController.navigate(Screen.Developer)
+            ThemeGlassContainer {
+                LargeTopAppBar(
+                    title = {
+                        Text(text = stringResource(R.string.settings))
+                    },
+                    colors = TopAppBarDefaults.largeTopAppBarColors(containerColor = Color.Transparent),
+                    navigationIcon = {
+                        BackButton()
+                    },
+                    scrollBehavior = scrollBehavior,
+                    actions = {
+                        if (settings.developerMode) {
+                            IconButton(
+                                onClick = {
+                                    navController.navigate(Screen.Developer)
+                                }
+                            ) {
+                                Icon(Lucide.Hammer, "Developer")
                             }
-                        ) {
-                            Icon(Lucide.Hammer, "Developer")
                         }
                     }
-                }
-            )
+                )
+            }
         },
         modifier = Modifier.nestedScroll(scrollBehavior.nestedScrollConnection)
     ) { innerPadding ->
@@ -200,6 +204,16 @@ fun SettingPage(vm: SettingVM = koinViewModel()) {
                     description = { Text(stringResource(R.string.setting_page_display_setting_desc)) },
                     icon = { Icon(Lucide.Monitor, "Display Setting") },
                     link = Screen.SettingDisplay
+                )
+            }
+
+            item {
+                SettingItem(
+                    navController = navController,
+                    title = { Text(stringResource(R.string.setting_page_theme_studio)) },
+                    description = { Text(stringResource(R.string.setting_page_theme_studio_desc)) },
+                    icon = { Icon(Lucide.Palette, stringResource(R.string.setting_page_theme_studio)) },
+                    link = Screen.SettingThemeStudio
                 )
             }
 
