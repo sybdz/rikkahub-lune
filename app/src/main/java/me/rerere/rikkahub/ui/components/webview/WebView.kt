@@ -86,6 +86,8 @@ fun WebView(
                         LayoutParams.MATCH_PARENT
                     )
 
+                    setBackgroundColor(android.graphics.Color.TRANSPARENT)
+
                     state.webView = this // Assign the WebView instance to the state
 
                     onCreated(this)

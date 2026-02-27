@@ -133,7 +133,7 @@ private fun wrapContentForWebView(content: String): String {
         return buildString {
             append("<!DOCTYPE html><html><head>")
             append("<meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0\">")
-            append("<style>html,body{margin:0;padding:0;height:auto}body{display:flex;justify-content:center}svg{max-width:100%;height:auto}</style>")
+            append("<style>html,body{margin:0;padding:0;height:auto;background:transparent}body{display:flex;justify-content:center}svg{max-width:100%;height:auto}</style>")
             append("</head><body>")
             append(content)
             append("</body></html>")
@@ -144,7 +144,7 @@ private fun wrapContentForWebView(content: String): String {
     return buildString {
         append("<!DOCTYPE html><html><head>")
         append("<meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0\">")
-        append("<style>html,body{margin:0;height:auto}body{padding:8px;word-wrap:break-word}</style>")
+        append("<style>html,body{margin:0;height:auto;background:transparent}body{padding:8px;word-wrap:break-word}</style>")
         append("</head><body>")
         append(content)
         append("</body></html>")
