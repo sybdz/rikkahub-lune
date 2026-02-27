@@ -126,6 +126,7 @@ fun WebView(
 
                 when (val content = state.content) {
                     is WebContent.Url -> {
+                        state.lastLoadedDataSignature = null
                         val url = content.url
                         // Only load new URL if it's different from the current one or if the state forces reload
                         // Also check if the webView's url is null or blank, which might happen initially
@@ -137,18 +138,18 @@ fun WebView(
                     }
 
                     is WebContent.Data -> {
-                        // Check if the data needs to be reloaded (e.g., if different from last loaded data)
-                        // For simplicity, we might just reload it every time the update block runs with Data content.
-                        // A more complex check could involve comparing `content.data` with a previously stored value.
-                        webView.loadDataWithBaseURL(
-                            content.baseUrl,
-                            content.data,
-                            content.mimeType,
-                            content.encoding,
-                            content.historyUrl
-                        )
-                        // Assuming data loading is fast, but let's reflect the state more accurately
-                        // state.isLoading = false // This might be too soon, let WebViewClient handle it
+                        val signature = content.hashCode()
+                        if (state.forceReload || state.lastLoadedDataSignature != signature) {
+                            webView.loadDataWithBaseURL(
+                                content.baseUrl,
+                                content.data,
+                                content.mimeType,
+                                content.encoding,
+                                content.historyUrl
+                            )
+                            state.lastLoadedDataSignature = signature
+                            state.forceReload = false
+                        }
                     }
 
                     WebContent.NavigatorOnly -> {
@@ -222,6 +223,7 @@ class WebViewState(
 
     // --- Settings ---
     var javaScriptEnabled: Boolean by mutableStateOf(true) // Example setting
+    internal var lastLoadedDataSignature: Int? = null
 
     // --- WebView Instance ---
     // Hold the WebView instance internally to perform actions.

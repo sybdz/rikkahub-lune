@@ -92,18 +92,22 @@ fun HighlightCodeBlock(
 ) {
     val darkMode = LocalDarkMode.current
     val colorPalette = if (darkMode) AtomOneDarkPalette else AtomOneLightPalette
-    val scrollState = rememberScrollState()
     val clipboardManager = LocalClipboard.current
     val scope = rememberCoroutineScope()
     val navController = LocalNavController.current
     val context = LocalContext.current
     val settings = LocalSettings.current
 
-    var isExpanded by remember(settings.displaySetting.codeBlockAutoCollapse) {
-        mutableStateOf(!settings.displaySetting.codeBlockAutoCollapse)
-    }
     val autoWrap = settings.displaySetting.codeBlockAutoWrap
     val showLineNumbers = settings.displaySetting.showLineNumbers
+    val autoCollapse = settings.displaySetting.codeBlockAutoCollapse
+    val shouldRenderHtmlPreview = settings.displaySetting.enableHtmlCodeBlockRendering &&
+        shouldRenderHtmlCodeBlock(
+            language = language,
+            code = code,
+            completeCodeBlock = completeCodeBlock
+        )
+    var showHtmlSourceCode by remember(code, language) { mutableStateOf(false) }
 
     val createDocumentLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.CreateDocument("*/*")
@@ -151,73 +155,150 @@ fun HighlightCodeBlock(
                         modifier = Modifier.fillMaxWidth(),
                     )
                 }
-                else -> {
+                shouldRenderHtmlPreview -> {
                     val textStyle = LocalTextStyle.current.merge(style)
-                    val codeLines = remember(code) { code.lines() }
-                    val collapsedCode = remember(codeLines) { codeLines.take(COLLAPSE_LINES).joinToString("\n") }
-                    val displayCode = if (isExpanded) code else collapsedCode
-                    val displayLines = remember(displayCode) { displayCode.lines() }
-
-                    // 如果显示行号且自动换行，需要逐行渲染以保持对齐
-                    when {
-                        showLineNumbers && autoWrap -> {
-                            CodeBlockWithLineNumbersWrapped(
-                                displayLines = displayLines,
-                                language = language,
-                                textStyle = textStyle,
-                                colorPalette = colorPalette,
-                            )
-                        }
-                        else -> {
-                            CodeBlockDefault(
-                                displayCode = displayCode,
-                                displayLines = displayLines,
-                                language = language,
-                                textStyle = textStyle,
-                                colorPalette = colorPalette,
-                                autoWrap = autoWrap,
-                                showLineNumbers = showLineNumbers,
-                                scrollState = scrollState,
-                            )
-                        }
-                    }
+                    HtmlCodeBlockPreview(
+                        htmlCode = code,
+                        modifier = Modifier.fillMaxWidth()
+                    )
 
                     Spacer(Modifier.height(4.dp))
-                    // 代码折叠按钮
-                    if (settings.displaySetting.codeBlockAutoCollapse && codeLines.size > COLLAPSE_LINES) {
-                        Box(
-                            modifier = Modifier
-                                .onClick {
-                                    isExpanded = !isExpanded
-                                }
-                                .fillMaxWidth(),
-                        ) {
-                            Row(
-                                modifier = Modifier
-                                    .align(Alignment.Center)
-                                    .padding(vertical = 4.dp),
-                                horizontalArrangement = Arrangement.spacedBy(4.dp),
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                Icon(
-                                    imageVector = if (isExpanded) Lucide.ChevronsUp else Lucide.ChevronsDown,
-                                    contentDescription = null,
-                                    tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f),
-                                    modifier = Modifier.size(textStyle.fontSize.toDp())
-                                )
-                                Text(
-                                    text = if (isExpanded) {
-                                        stringResource(id = R.string.code_block_collapse)
-                                    } else {
-                                        stringResource(id = R.string.code_block_expand)
-                                    },
-                                    fontSize = textStyle.fontSize,
-                                    lineHeight = textStyle.lineHeight,
-                                )
+                    Box(
+                        modifier = Modifier
+                            .onClick {
+                                showHtmlSourceCode = !showHtmlSourceCode
                             }
+                            .fillMaxWidth(),
+                    ) {
+                        Row(
+                            modifier = Modifier
+                                .align(Alignment.Center)
+                                .padding(vertical = 4.dp),
+                            horizontalArrangement = Arrangement.spacedBy(4.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Icon(
+                                imageVector = if (showHtmlSourceCode) Lucide.ChevronsUp else Lucide.ChevronsDown,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f),
+                                modifier = Modifier.size(textStyle.fontSize.toDp())
+                            )
+                            Text(
+                                text = if (showHtmlSourceCode) {
+                                    stringResource(id = R.string.code_block_hide_source)
+                                } else {
+                                    stringResource(id = R.string.code_block_show_source)
+                                },
+                                fontSize = textStyle.fontSize,
+                                lineHeight = textStyle.lineHeight,
+                            )
                         }
                     }
+
+                    if (showHtmlSourceCode) {
+                        Spacer(Modifier.height(4.dp))
+                        RenderHighlightedCodeSource(
+                            code = code,
+                            language = language,
+                            style = style,
+                            colorPalette = colorPalette,
+                            autoWrap = autoWrap,
+                            showLineNumbers = showLineNumbers,
+                            autoCollapse = autoCollapse,
+                        )
+                    }
                 }
+                else -> {
+                    RenderHighlightedCodeSource(
+                        code = code,
+                        language = language,
+                        style = style,
+                        colorPalette = colorPalette,
+                        autoWrap = autoWrap,
+                        showLineNumbers = showLineNumbers,
+                        autoCollapse = autoCollapse,
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun RenderHighlightedCodeSource(
+    code: String,
+    language: String,
+    style: TextStyle?,
+    colorPalette: HighlightTextColorPalette,
+    autoWrap: Boolean,
+    showLineNumbers: Boolean,
+    autoCollapse: Boolean,
+) {
+    val scrollState = rememberScrollState()
+    var isExpanded by remember(code, autoCollapse) {
+        mutableStateOf(!autoCollapse)
+    }
+
+    val textStyle = LocalTextStyle.current.merge(style)
+    val codeLines = remember(code) { code.lines() }
+    val collapsedCode = remember(codeLines) { codeLines.take(COLLAPSE_LINES).joinToString("\n") }
+    val displayCode = if (isExpanded) code else collapsedCode
+    val displayLines = remember(displayCode) { displayCode.lines() }
+
+    when {
+        showLineNumbers && autoWrap -> {
+            CodeBlockWithLineNumbersWrapped(
+                displayLines = displayLines,
+                language = language,
+                textStyle = textStyle,
+                colorPalette = colorPalette,
+            )
+        }
+        else -> {
+            CodeBlockDefault(
+                displayCode = displayCode,
+                displayLines = displayLines,
+                language = language,
+                textStyle = textStyle,
+                colorPalette = colorPalette,
+                autoWrap = autoWrap,
+                showLineNumbers = showLineNumbers,
+                scrollState = scrollState,
+            )
+        }
+    }
+
+    Spacer(Modifier.height(4.dp))
+    if (autoCollapse && codeLines.size > COLLAPSE_LINES) {
+        Box(
+            modifier = Modifier
+                .onClick {
+                    isExpanded = !isExpanded
+                }
+                .fillMaxWidth(),
+        ) {
+            Row(
+                modifier = Modifier
+                    .align(Alignment.Center)
+                    .padding(vertical = 4.dp),
+                horizontalArrangement = Arrangement.spacedBy(4.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Icon(
+                    imageVector = if (isExpanded) Lucide.ChevronsUp else Lucide.ChevronsDown,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f),
+                    modifier = Modifier.size(textStyle.fontSize.toDp())
+                )
+                Text(
+                    text = if (isExpanded) {
+                        stringResource(id = R.string.code_block_collapse)
+                    } else {
+                        stringResource(id = R.string.code_block_expand)
+                    },
+                    fontSize = textStyle.fontSize,
+                    lineHeight = textStyle.lineHeight,
+                )
             }
         }
     }
@@ -402,7 +483,7 @@ private fun HighlightCodeActions(
                 }
             )
 
-            if (language == "html") {
+            if (shouldRenderHtmlCodeBlock(language = language, code = code)) {
                 Text(
                     text = stringResource(id = R.string.code_block_preview),
                     fontSize = 12.sp,
