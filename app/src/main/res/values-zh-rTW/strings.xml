@@ -1018,4 +1018,7 @@
   <string name="error_title_compress_conversation">對話壓縮失敗</string>
   <string name="error_title_operation">操作失敗</string>
   <string name="setting_provider_page_claude_prompt_caching">提示快取 (cache_control)</string>
+  <string name="code_block_source">原始碼</string>
+  <string name="code_block_render">渲染</string>
 </resources>
+

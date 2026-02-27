@@ -1026,5 +1026,7 @@
   <string name="error_title_translate_message">Message translation failed</string>
   <string name="error_title_compress_conversation">Conversation compression failed</string>
   <string name="error_title_operation">Operation failed</string>
+  <string name="code_block_source">Source</string>
+  <string name="code_block_render">Render</string>
 </resources>
 
