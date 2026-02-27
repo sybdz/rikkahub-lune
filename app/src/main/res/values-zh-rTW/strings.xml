@@ -366,6 +366,8 @@
   <string name="setting_display_page_chat_list_model_icon_title">聊天列表模型圖標</string>
   <string name="setting_display_page_code_block_auto_collapse_desc">預設自動摺疊程式碼區塊</string>
   <string name="setting_display_page_code_block_auto_collapse_title">程式碼區塊自動摺疊</string>
+  <string name="setting_display_page_code_block_render_html_desc">將完整的 HTML/SVG 程式碼區塊直接以 WebView 渲染顯示</string>
+  <string name="setting_display_page_code_block_render_html_title">程式碼區塊 HTML/SVG 自動渲染</string>
   <string name="setting_display_page_code_block_auto_wrap_desc">自動換行程式碼區塊中的長行</string>
   <string name="setting_display_page_code_block_auto_wrap_title">程式碼區塊自動換行</string>
   <string name="setting_display_page_create_new_conversation_on_start_desc">當應用程式啟動時，自動建立一個新的對話</string>
@@ -1021,4 +1023,3 @@
   <string name="code_block_source">原始碼</string>
   <string name="code_block_render">渲染</string>
 </resources>
-

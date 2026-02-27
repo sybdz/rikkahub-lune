@@ -416,6 +416,8 @@
   <string name="setting_display_page_chat_list_model_icon_title">Chat List Model Icon</string>
   <string name="setting_display_page_code_block_auto_collapse_desc">Automatically collapse code blocks by default</string>
   <string name="setting_display_page_code_block_auto_collapse_title">Code Block Auto Collapse</string>
+  <string name="setting_display_page_code_block_render_html_desc">Render complete HTML/SVG code blocks directly with WebView</string>
+  <string name="setting_display_page_code_block_render_html_title">Code Block HTML/SVG Auto Render</string>
   <string name="setting_display_page_code_block_auto_wrap_desc">Automatically wrap long lines in code blocks</string>
   <string name="setting_display_page_code_block_auto_wrap_title">Code Block Auto Wrap</string>
   <string name="setting_display_page_create_new_conversation_on_start_desc">Create a new conversation when the app starts</string>
@@ -1029,4 +1031,3 @@
   <string name="code_block_source">Source</string>
   <string name="code_block_render">Render</string>
 </resources>
-

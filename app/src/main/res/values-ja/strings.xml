@@ -366,6 +366,8 @@
   <string name="setting_display_page_chat_list_model_icon_title">チャットリストのモデルアイコン</string>
   <string name="setting_display_page_code_block_auto_collapse_desc">デフォルトでコードブロックを自動的に折りたたむ</string>
   <string name="setting_display_page_code_block_auto_collapse_title">コードブロックの自動折りたたみ</string>
+  <string name="setting_display_page_code_block_render_html_desc">完全な HTML/SVG コードブロックを WebView で直接レンダリングします</string>
+  <string name="setting_display_page_code_block_render_html_title">コードブロック HTML/SVG 自動レンダリング</string>
   <string name="setting_display_page_code_block_auto_wrap_desc">コードブロック内の長い行を自動的に折り返す</string>
   <string name="setting_display_page_code_block_auto_wrap_title">コードブロックの自動折り返し</string>
   <string name="setting_display_page_create_new_conversation_on_start_desc">アプリ起動時に新しい会話を自動作成する</string>
@@ -1023,4 +1025,3 @@ mDNSアドレス: .localホスト名を使用し、IPを知らなくても同じ
   <string name="code_block_source">ソース</string>
   <string name="code_block_render">レンダー</string>
 </resources>
-

@@ -366,6 +366,8 @@
   <string name="setting_display_page_chat_list_model_icon_title">채팅 목록 모델 아이콘</string>
   <string name="setting_display_page_code_block_auto_collapse_desc">기본적으로 코드 블록을 자동으로 접기</string>
   <string name="setting_display_page_code_block_auto_collapse_title">코드 블록 자동 접기</string>
+  <string name="setting_display_page_code_block_render_html_desc">완전한 HTML/SVG 코드 블록을 WebView로 바로 렌더링합니다</string>
+  <string name="setting_display_page_code_block_render_html_title">코드 블록 HTML/SVG 자동 렌더링</string>
   <string name="setting_display_page_code_block_auto_wrap_desc">코드 블록의 긴 줄을 자동으로 줄 바꿈</string>
   <string name="setting_display_page_code_block_auto_wrap_title">코드 블록 자동 줄 바꿈</string>
   <string name="setting_display_page_create_new_conversation_on_start_desc">앱 시작 시 새 대화 생성</string>
@@ -1023,4 +1025,3 @@ mDNS 주소: .local 호스트네임을 사용하며, IP를 몰라도 같은 네�
   <string name="code_block_source">소스</string>
   <string name="code_block_render">렌더</string>
 </resources>
-

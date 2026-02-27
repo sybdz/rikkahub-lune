@@ -12,7 +12,6 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.dp
 import me.rerere.rikkahub.ui.components.webview.WebView
 import me.rerere.rikkahub.ui.components.webview.rememberWebViewState
@@ -64,18 +63,16 @@ fun InlineHtmlRenderer(
     code: String,
     modifier: Modifier = Modifier,
 ) {
-    val density = LocalDensity.current
-
-    var contentHeight by remember {
+    var contentHeightDp by remember(code) {
         mutableIntStateOf(htmlHeightCache.getIfPresent(code) ?: 100)
     }
-    val height = with(density) { contentHeight.toDp() }
+    val height = contentHeightDp.dp
 
-    val jsInterface = remember {
+    val jsInterface = remember(code) {
         HtmlRendererInterface(
             onHeightChanged = { newHeight ->
-                contentHeight = (newHeight * density.density).toInt()
-                htmlHeightCache.put(code, contentHeight)
+                contentHeightDp = newHeight
+                htmlHeightCache.put(code, contentHeightDp)
             }
         )
     }
@@ -93,6 +90,7 @@ fun InlineHtmlRenderer(
         settings = {
             builtInZoomControls = true
             displayZoomControls = false
+            javaScriptCanOpenWindowsAutomatically = false
         }
     )
 
@@ -162,8 +160,8 @@ private fun injectHeightReportingScript(html: String): String {
                 // viewport grows → JS reports inflated height → Compose keeps it large.
                 // body.scrollHeight correctly reports only the content height.
                 var height = Math.max(
-                    document.body.scrollHeight || 0,
-                    document.body.offsetHeight || 0
+                    (document.body && document.body.scrollHeight) || 0,
+                    (document.body && document.body.offsetHeight) || 0
                 );
                 if (height > 0 && window.AndroidHtmlInterface) {
                     AndroidHtmlInterface.updateHeight(height);
@@ -177,7 +175,7 @@ private fun injectHeightReportingScript(html: String): String {
             if (window.ResizeObserver) {
                 new ResizeObserver(function() {
                     reportHeightToAndroid();
-                }).observe(document.body);
+                }).observe(document.body || document.documentElement);
             }
 
             window.addEventListener('resize', reportHeightToAndroid);

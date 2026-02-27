@@ -104,9 +104,18 @@ fun HighlightCodeBlock(
     }
     val autoWrap = settings.displaySetting.codeBlockAutoWrap
     val showLineNumbers = settings.displaySetting.showLineNumbers
+    val enableCodeBlockHtmlRendering = settings.displaySetting.enableCodeBlockHtmlRendering
 
     val isHtmlFrontend = completeCodeBlock && (isFrontendHtml(code) || language.lowercase() == "svg")
-    var showRenderedHtml by remember { mutableStateOf(true) }
+    val shouldRenderHtmlInline = isHtmlFrontend && enableCodeBlockHtmlRendering
+
+    if (shouldRenderHtmlInline) {
+        InlineHtmlRenderer(
+            code = code,
+            modifier = modifier.fillMaxWidth(),
+        )
+        return
+    }
 
     val createDocumentLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.CreateDocument("*/*")
@@ -142,9 +151,6 @@ fun HighlightCodeBlock(
                 code = code,
                 createDocumentLauncher = createDocumentLauncher,
                 navController = navController,
-                isHtmlFrontend = isHtmlFrontend,
-                showRenderedHtml = showRenderedHtml,
-                onToggleRenderedHtml = { showRenderedHtml = !showRenderedHtml },
             )
         }
         Column(
@@ -153,12 +159,6 @@ fun HighlightCodeBlock(
             when {
                 completeCodeBlock && language == "mermaid" -> {
                     Mermaid(
-                        code = code,
-                        modifier = Modifier.fillMaxWidth(),
-                    )
-                }
-                isHtmlFrontend && showRenderedHtml -> {
-                    InlineHtmlRenderer(
                         code = code,
                         modifier = Modifier.fillMaxWidth(),
                     )
@@ -343,9 +343,6 @@ private fun HighlightCodeActions(
     code: String,
     createDocumentLauncher: ManagedActivityResultLauncher<String, Uri?>,
     navController: Navigator,
-    isHtmlFrontend: Boolean = false,
-    showRenderedHtml: Boolean = false,
-    onToggleRenderedHtml: () -> Unit = {},
 ) {
     Row(
         modifier = Modifier.fillMaxWidth(),
@@ -431,19 +428,6 @@ private fun HighlightCodeActions(
                 )
             }
 
-            if (isHtmlFrontend) {
-                Text(
-                    text = if (showRenderedHtml) {
-                        stringResource(id = R.string.code_block_source)
-                    } else {
-                        stringResource(id = R.string.code_block_render)
-                    },
-                    fontSize = 12.sp,
-                    lineHeight = 12.sp,
-                    color = MaterialTheme.colorScheme.primary.copy(alpha = 0.7f),
-                    modifier = Modifier.clickable { onToggleRenderedHtml() }
-                )
-            }
         }
     }
 }
