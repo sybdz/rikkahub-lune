@@ -126,7 +126,7 @@ fun WebView(
 
                 when (val content = state.content) {
                     is WebContent.Url -> {
-                        state.lastLoadedDataSignature = null
+                        state.lastLoadedData = null
                         val url = content.url
                         // Only load new URL if it's different from the current one or if the state forces reload
                         // Also check if the webView's url is null or blank, which might happen initially
@@ -138,8 +138,7 @@ fun WebView(
                     }
 
                     is WebContent.Data -> {
-                        val signature = content.hashCode()
-                        if (state.forceReload || state.lastLoadedDataSignature != signature) {
+                        if (state.forceReload || state.lastLoadedData != content) {
                             webView.loadDataWithBaseURL(
                                 content.baseUrl,
                                 content.data,
@@ -147,7 +146,7 @@ fun WebView(
                                 content.encoding,
                                 content.historyUrl
                             )
-                            state.lastLoadedDataSignature = signature
+                            state.lastLoadedData = content
                             state.forceReload = false
                         }
                     }
@@ -223,7 +222,7 @@ class WebViewState(
 
     // --- Settings ---
     var javaScriptEnabled: Boolean by mutableStateOf(true) // Example setting
-    internal var lastLoadedDataSignature: Int? = null
+    internal var lastLoadedData: WebContent.Data? = null
 
     // --- WebView Instance ---
     // Hold the WebView instance internally to perform actions.

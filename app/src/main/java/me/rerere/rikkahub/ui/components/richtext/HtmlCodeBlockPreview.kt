@@ -8,7 +8,7 @@ import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.unit.dp
 import me.rerere.rikkahub.ui.components.webview.WebView
 import me.rerere.rikkahub.ui.components.webview.rememberWebViewState
 import kotlin.math.max
@@ -19,9 +19,9 @@ private val FULL_HTML_DOCUMENT_TAG_REGEX = Regex(
 )
 
 private const val HTML_PREVIEW_BRIDGE_NAME = "RikkaHtmlPreview"
-private const val DEFAULT_PREVIEW_HEIGHT_PX = 220
-private const val MIN_PREVIEW_HEIGHT_PX = 120
-private const val MAX_PREVIEW_HEIGHT_PX = 900
+private const val DEFAULT_PREVIEW_HEIGHT_DP = 220
+private const val MIN_PREVIEW_HEIGHT_DP = 120
+private const val MAX_PREVIEW_HEIGHT_DP = 900
 
 private const val INSTALL_HEIGHT_OBSERVER_SCRIPT = """
 (function () {
@@ -101,19 +101,18 @@ fun HtmlCodeBlockPreview(
     htmlCode: String,
     modifier: Modifier = Modifier,
 ) {
-    val density = LocalDensity.current
-    var contentHeightPx by remember(htmlCode) { mutableIntStateOf(DEFAULT_PREVIEW_HEIGHT_PX) }
+    var contentHeightDp by remember(htmlCode) { mutableIntStateOf(DEFAULT_PREVIEW_HEIGHT_DP) }
 
     val jsInterface = remember(htmlCode) {
         HtmlCodeBlockPreviewBridge(
             onHeightChanged = { height ->
-                contentHeightPx = height.coerceIn(MIN_PREVIEW_HEIGHT_PX, MAX_PREVIEW_HEIGHT_PX)
+                contentHeightDp = height.coerceIn(MIN_PREVIEW_HEIGHT_DP, MAX_PREVIEW_HEIGHT_DP)
             }
         )
     }
 
     val htmlDocument = remember(htmlCode) { buildHtmlPreviewDocument(htmlCode) }
-    val previewHeight = with(density) { max(contentHeightPx, MIN_PREVIEW_HEIGHT_PX).toDp() }
+    val previewHeight = max(contentHeightDp, MIN_PREVIEW_HEIGHT_DP).dp
 
     WebView(
         state = rememberWebViewState(
