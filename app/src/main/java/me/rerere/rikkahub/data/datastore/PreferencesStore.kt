@@ -587,6 +587,7 @@ data class DisplaySetting(
     val enableScheduledTaskNotification: Boolean = true,
     val codeBlockAutoWrap: Boolean = false,
     val codeBlockAutoCollapse: Boolean = false,
+    val enableHtmlCodeBlockRendering: Boolean = true,
     val showLineNumbers: Boolean = false,
     val ttsOnlyReadQuoted: Boolean = false,
     val autoPlayTTSAfterGeneration: Boolean = false,

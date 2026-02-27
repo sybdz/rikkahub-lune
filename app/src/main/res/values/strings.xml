@@ -271,7 +271,9 @@
   <string name="code_block_collapse">Collapse</string>
   <string name="code_block_copy">Copy Code</string>
   <string name="code_block_expand">Expand</string>
+  <string name="code_block_hide_source">Hide Source</string>
   <string name="code_block_preview">Preview</string>
+  <string name="code_block_show_source">Show Source</string>
   <string name="collapse_translation">Collapse Translation</string>
   <string name="confirm">Confirm</string>
   <string name="confirm_delete">Confirm Delete</string>
@@ -418,6 +420,8 @@
   <string name="setting_display_page_code_block_auto_collapse_title">Code Block Auto Collapse</string>
   <string name="setting_display_page_code_block_auto_wrap_desc">Automatically wrap long lines in code blocks</string>
   <string name="setting_display_page_code_block_auto_wrap_title">Code Block Auto Wrap</string>
+  <string name="setting_display_page_enable_html_code_block_rendering_desc">Automatically render HTML-like code blocks as interactive previews</string>
+  <string name="setting_display_page_enable_html_code_block_rendering_title">HTML Code Block Rendering</string>
   <string name="setting_display_page_create_new_conversation_on_start_desc">Create a new conversation when the app starts</string>
   <string name="setting_display_page_create_new_conversation_on_start_title">New chat on launch</string>
   <string name="setting_display_page_developer_mode">Developer Mode</string>
@@ -1027,4 +1031,3 @@
   <string name="error_title_compress_conversation">Conversation compression failed</string>
   <string name="error_title_operation">Operation failed</string>
 </resources>
-

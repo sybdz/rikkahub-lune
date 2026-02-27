@@ -551,6 +551,26 @@ fun SettingDisplayPage(vm: SettingVM = koinViewModel()) {
                 ListItem(
                     colors = ListItemDefaults.colors(containerColor = Color.Transparent),
                     headlineContent = {
+                        Text(stringResource(R.string.setting_display_page_enable_html_code_block_rendering_title))
+                    },
+                    supportingContent = {
+                        Text(stringResource(R.string.setting_display_page_enable_html_code_block_rendering_desc))
+                    },
+                    trailingContent = {
+                        Switch(
+                            checked = displaySetting.enableHtmlCodeBlockRendering,
+                            onCheckedChange = {
+                                updateDisplaySetting(displaySetting.copy(enableHtmlCodeBlockRendering = it))
+                            }
+                        )
+                    },
+                )
+            }
+
+            item {
+                ListItem(
+                    colors = ListItemDefaults.colors(containerColor = Color.Transparent),
+                    headlineContent = {
                         Text(stringResource(R.string.setting_display_page_show_line_numbers_title))
                     },
                     supportingContent = {
