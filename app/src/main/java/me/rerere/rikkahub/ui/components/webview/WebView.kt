@@ -13,6 +13,7 @@ import android.webkit.WebSettings
 import android.webkit.WebView
 import android.webkit.WebViewClient
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.runtime.Composable
@@ -23,6 +24,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.viewinterop.AndroidView
 import kotlin.math.abs
 
@@ -80,9 +82,13 @@ fun WebView(
     // Remember the clients based on the state
     val webChromeClient = remember { MyWebChromeClient(state) }
     val webViewClient = remember { MyWebViewClient(state) }
+    val touchListener = remember(preferInnerScrollWhenScrollable) {
+        createScrollPriorityTouchListener(preferInnerScrollWhenScrollable)
+    }
+    var lastLoadedDataKey by remember(state) { mutableStateOf<Int?>(null) }
 
     Box(
-        modifier = modifier
+        modifier = modifier.clipToBounds()
     ) {
         AndroidView(
             factory = { context ->
@@ -106,7 +112,9 @@ fun WebView(
                     isVerticalScrollBarEnabled = showScrollBars
                     isHorizontalScrollBarEnabled = showScrollBars
                     overScrollMode = View.OVER_SCROLL_NEVER
-                    setOnTouchListener(createScrollPriorityTouchListener(preferInnerScrollWhenScrollable))
+                    clipChildren = true
+                    clipToPadding = true
+                    setOnTouchListener(touchListener)
 
                     // Use the created clients
                     this.webChromeClient = webChromeClient
@@ -117,7 +125,7 @@ fun WebView(
                     }
                 }
             },
-            modifier = Modifier.fillMaxWidth(), // Make WebView fill the width
+            modifier = Modifier.fillMaxSize(),
             onReset = {
                 state.interfaces.forEach { (name, _) ->
                     it.removeJavascriptInterface(name)
@@ -139,10 +147,13 @@ fun WebView(
                 webView.isVerticalScrollBarEnabled = showScrollBars
                 webView.isHorizontalScrollBarEnabled = showScrollBars
                 webView.overScrollMode = View.OVER_SCROLL_NEVER
-                webView.setOnTouchListener(createScrollPriorityTouchListener(preferInnerScrollWhenScrollable))
+                webView.clipChildren = true
+                webView.clipToPadding = true
+                webView.setOnTouchListener(touchListener)
 
                 when (val content = state.content) {
                     is WebContent.Url -> {
+                        lastLoadedDataKey = null
                         val url = content.url
                         // Only load new URL if it's different from the current one or if the state forces reload
                         // Also check if the webView's url is null or blank, which might happen initially
@@ -154,18 +165,18 @@ fun WebView(
                     }
 
                     is WebContent.Data -> {
-                        // Check if the data needs to be reloaded (e.g., if different from last loaded data)
-                        // For simplicity, we might just reload it every time the update block runs with Data content.
-                        // A more complex check could involve comparing `content.data` with a previously stored value.
-                        webView.loadDataWithBaseURL(
-                            content.baseUrl,
-                            content.data,
-                            content.mimeType,
-                            content.encoding,
-                            content.historyUrl
-                        )
-                        // Assuming data loading is fast, but let's reflect the state more accurately
-                        // state.isLoading = false // This might be too soon, let WebViewClient handle it
+                        val dataKey = content.reloadKey()
+                        if (state.forceReload || dataKey != lastLoadedDataKey) {
+                            webView.loadDataWithBaseURL(
+                                content.baseUrl,
+                                content.data,
+                                content.mimeType,
+                                content.encoding,
+                                content.historyUrl
+                            )
+                            lastLoadedDataKey = dataKey
+                            state.forceReload = false
+                        }
                     }
 
                     WebContent.NavigatorOnly -> {
@@ -205,8 +216,9 @@ private fun createScrollPriorityTouchListener(
             MotionEvent.ACTION_DOWN -> {
                 lastTouchY = motionEvent.y
                 hasLastTouchY = true
-                val canScrollInternally = webView.canScrollVertically(-1) || webView.canScrollVertically(1)
-                view.parent?.requestDisallowInterceptTouchEvent(canScrollInternally)
+                // Let parent keep intercept ability initially.
+                // We only lock to WebView after we detect a directional move that WebView can consume.
+                view.parent?.requestDisallowInterceptTouchEvent(false)
             }
 
             MotionEvent.ACTION_MOVE -> {
@@ -219,11 +231,8 @@ private fun createScrollPriorityTouchListener(
                 if (abs(deltaY) >= touchSlop) {
                     // Finger drag direction decides the intended scroll direction:
                     // drag down -> scroll up (-1), drag up -> scroll down (1)
-                    val canScrollInCurrentDirection = if (deltaY > 0) {
-                        webView.canScrollVertically(-1)
-                    } else {
-                        webView.canScrollVertically(1)
-                    }
+                    val intendedScrollDirection = if (deltaY > 0) -1 else 1
+                    val canScrollInCurrentDirection = webView.canScrollVertically(intendedScrollDirection)
                     view.parent?.requestDisallowInterceptTouchEvent(canScrollInCurrentDirection)
                     lastTouchY = motionEvent.y
                 }
@@ -236,6 +245,15 @@ private fun createScrollPriorityTouchListener(
         }
         false
     }
+}
+
+private fun WebContent.Data.reloadKey(): Int {
+    var result = data.hashCode()
+    result = 31 * result + (baseUrl?.hashCode() ?: 0)
+    result = 31 * result + encoding.hashCode()
+    result = 31 * result + (mimeType?.hashCode() ?: 0)
+    result = 31 * result + (historyUrl?.hashCode() ?: 0)
+    return result
 }
 
 // --- State and Content Definition ---
