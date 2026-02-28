@@ -91,8 +91,8 @@ fun InlineHtmlRenderer(
             setSupportZoom(false)
             builtInZoomControls = false
             displayZoomControls = false
-            useWideViewPort = true
-            loadWithOverviewMode = true
+            useWideViewPort = false
+            loadWithOverviewMode = false
             javaScriptCanOpenWindowsAutomatically = false
         }
     )
@@ -135,8 +135,18 @@ private fun wrapContentForWebView(content: String): String {
     if (SVG_TAG_REGEX.containsMatchIn(lower)) {
         return buildString {
             append("<!DOCTYPE html><html><head>")
-            append("<meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no\">")
-            append("<style>html,body{margin:0;padding:0;height:auto;background:transparent;overflow:hidden;max-width:100%}body{display:flex;justify-content:center}svg{max-width:100%;height:auto}*{box-sizing:border-box}</style>")
+            append(
+                "<meta name=\"viewport\" " +
+                    "content=\"width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no\">"
+            )
+            append(
+                "<style>" +
+                    "html,body{margin:0;padding:0;width:100%;height:auto;background:transparent;overflow-x:auto}" +
+                    "body{display:flex;justify-content:center;align-items:flex-start}" +
+                    "svg{display:block;max-width:100%;height:auto;margin:0 auto}" +
+                    "*{box-sizing:border-box}" +
+                    "</style>"
+            )
             append("</head><body>")
             append(content)
             append("</body></html>")
@@ -146,10 +156,25 @@ private fun wrapContentForWebView(content: String): String {
     // HTML fragment
     return buildString {
         append("<!DOCTYPE html><html><head>")
-        append("<meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no\">")
-        append("<style>html,body{margin:0;height:auto;background:transparent;overflow-x:hidden;max-width:100%}body{padding:8px;word-wrap:break-word}*{box-sizing:border-box}</style>")
+        append(
+            "<meta name=\"viewport\" " +
+                "content=\"width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no\">"
+        )
+        append(
+            "<style>" +
+                "html,body{margin:0;height:auto;background:transparent;max-width:100%;overflow-x:auto;" +
+                "-webkit-text-size-adjust:100%}" +
+                "body{padding:8px;word-wrap:break-word;overflow-wrap:anywhere}" +
+                "img,svg,video,canvas,iframe{max-width:100%;height:auto}" +
+                "table,pre{display:block;max-width:100%;overflow-x:auto}" +
+                ".rk-inline-html-content{max-width:100%;margin:0 auto}" +
+                "*{box-sizing:border-box}" +
+                "</style>"
+        )
         append("</head><body>")
+        append("<div class=\"rk-inline-html-content\">")
         append(content)
+        append("</div>")
         append("</body></html>")
     }
 }
@@ -159,7 +184,8 @@ private fun injectHeightReportingScript(html: String): String {
         <script>
         (function() {
             function ensureViewport() {
-                var content = "width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover";
+                var content = "width=device-width, initial-scale=1.0, maximum-scale=1.0, " +
+                    "user-scalable=no, viewport-fit=cover";
                 var viewport = document.querySelector('meta[name="viewport"]');
                 if (!viewport) {
                     viewport = document.createElement("meta");
@@ -175,10 +201,12 @@ private fun injectHeightReportingScript(html: String): String {
                 var style = document.createElement("style");
                 style.id = styleId;
                 style.textContent = [
-                    "html,body{max-width:100%!important;width:100%!important;overflow-x:hidden!important;-webkit-text-size-adjust:100%;}",
-                    "img,svg,video,canvas,iframe,table,pre{max-width:100%!important;height:auto;}",
-                    "table,pre{display:block;overflow-x:auto;}",
-                    "*{box-sizing:border-box;max-width:100vw;}"
+                    "html,body{max-width:100%!important;overflow-x:auto!important;-webkit-text-size-adjust:100%;}",
+                    "body{margin-left:auto!important;margin-right:auto!important;}",
+                    "img,svg,video,canvas,iframe{max-width:100%!important;height:auto!important;}",
+                    "table,pre{display:block!important;max-width:100%!important;overflow-x:auto!important;}",
+                    "*{box-sizing:border-box!important;}",
+                    "[style*='100vw']{max-width:100%!important;}"
                 ].join("");
                 (document.head || document.documentElement).appendChild(style);
             }

@@ -59,8 +59,8 @@ fun WebViewPage(url: String, content: String) {
                 setSupportZoom(false)
                 builtInZoomControls = false
                 displayZoomControls = false
-                useWideViewPort = true
-                loadWithOverviewMode = true
+                useWideViewPort = false
+                loadWithOverviewMode = false
             }
         )
     }
