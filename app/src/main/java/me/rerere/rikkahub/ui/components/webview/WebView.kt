@@ -5,6 +5,7 @@ import android.graphics.Bitmap
 import android.util.Log
 import android.view.MotionEvent
 import android.view.View
+import android.view.ViewConfiguration
 import android.view.ViewGroup.LayoutParams
 import android.webkit.ConsoleMessage
 import android.webkit.WebChromeClient
@@ -23,6 +24,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.viewinterop.AndroidView
+import kotlin.math.abs
 
 private const val TAG = "WebView"
 
@@ -189,15 +191,46 @@ private fun createScrollPriorityTouchListener(
 ): View.OnTouchListener? {
     if (!preferInnerScrollWhenScrollable) return null
 
+    var lastTouchY = 0f
+    var hasLastTouchY = false
+    var touchSlop = -1
+
     return View.OnTouchListener { view, motionEvent ->
         val webView = view as WebView
+        if (touchSlop < 0) {
+            touchSlop = ViewConfiguration.get(view.context).scaledTouchSlop
+        }
+
         when (motionEvent.actionMasked) {
-            MotionEvent.ACTION_DOWN, MotionEvent.ACTION_MOVE -> {
+            MotionEvent.ACTION_DOWN -> {
+                lastTouchY = motionEvent.y
+                hasLastTouchY = true
                 val canScrollInternally = webView.canScrollVertically(-1) || webView.canScrollVertically(1)
                 view.parent?.requestDisallowInterceptTouchEvent(canScrollInternally)
             }
 
+            MotionEvent.ACTION_MOVE -> {
+                if (!hasLastTouchY) {
+                    lastTouchY = motionEvent.y
+                    hasLastTouchY = true
+                }
+
+                val deltaY = motionEvent.y - lastTouchY
+                if (abs(deltaY) >= touchSlop) {
+                    // Finger drag direction decides the intended scroll direction:
+                    // drag down -> scroll up (-1), drag up -> scroll down (1)
+                    val canScrollInCurrentDirection = if (deltaY > 0) {
+                        webView.canScrollVertically(-1)
+                    } else {
+                        webView.canScrollVertically(1)
+                    }
+                    view.parent?.requestDisallowInterceptTouchEvent(canScrollInCurrentDirection)
+                    lastTouchY = motionEvent.y
+                }
+            }
+
             MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
+                hasLastTouchY = false
                 view.parent?.requestDisallowInterceptTouchEvent(false)
             }
         }
