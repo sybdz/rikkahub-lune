@@ -2,7 +2,6 @@ package me.rerere.rikkahub.ui.components.richtext
 
 import android.os.Handler
 import android.os.Looper
-import android.view.MotionEvent
 import android.view.ViewGroup
 import android.webkit.JavascriptInterface
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -18,9 +17,10 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.unit.dp
 import me.rerere.rikkahub.R
 import me.rerere.rikkahub.ui.components.webview.WebView
+import me.rerere.rikkahub.ui.components.webview.enableDirectionalParentScrollHandoff
 import me.rerere.rikkahub.ui.components.webview.rememberWebViewState
 
-private const val MIN_PREVIEW_HEIGHT_DP = 72
+private const val MIN_PREVIEW_HEIGHT_DP = 10
 
 private const val INITIAL_PREVIEW_HEIGHT_DP = 180
 
@@ -107,18 +107,7 @@ internal fun WebRenderedCodeBlock(
             .height(contentHeightDp.coerceAtLeast(MIN_PREVIEW_HEIGHT_DP).dp),
         onCreated = { webView ->
             webView.setTag(R.id.tag_code_block_render_signature, renderSignature)
-            webView.setOnTouchListener { view, event ->
-                when (event?.actionMasked) {
-                    MotionEvent.ACTION_DOWN, MotionEvent.ACTION_MOVE -> {
-                        view.parent?.requestDisallowInterceptTouchEvent(true)
-                    }
-
-                    MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
-                        view.parent?.requestDisallowInterceptTouchEvent(false)
-                    }
-                }
-                false
-            }
+            webView.enableDirectionalParentScrollHandoff()
         },
         onUpdated = { webView ->
             val currentSignature = webView.getTag(R.id.tag_code_block_render_signature) as? String

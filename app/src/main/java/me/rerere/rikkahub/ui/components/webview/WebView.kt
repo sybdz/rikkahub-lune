@@ -3,6 +3,7 @@ package me.rerere.rikkahub.ui.components.webview
 import android.annotation.SuppressLint
 import android.graphics.Bitmap
 import android.util.Log
+import android.view.MotionEvent
 import android.view.ViewGroup.LayoutParams
 import android.webkit.ConsoleMessage
 import android.webkit.WebChromeClient
@@ -21,8 +22,50 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.viewinterop.AndroidView
+import kotlin.math.abs
 
 private const val TAG = "WebView"
+
+internal fun WebView.enableDirectionalParentScrollHandoff() {
+    var lastX = 0f
+    var lastY = 0f
+    setOnTouchListener { view, event ->
+        when (event?.actionMasked) {
+            MotionEvent.ACTION_DOWN -> {
+                lastX = event.x
+                lastY = event.y
+                val canScrollInAnyDirection =
+                    view.canScrollVertically(-1) ||
+                        view.canScrollVertically(1) ||
+                        view.canScrollHorizontally(-1) ||
+                        view.canScrollHorizontally(1)
+                view.parent?.requestDisallowInterceptTouchEvent(canScrollInAnyDirection)
+            }
+
+            MotionEvent.ACTION_MOVE -> {
+                val dx = event.x - lastX
+                val dy = event.y - lastY
+                val canScrollCurrentDirection = if (abs(dy) >= abs(dx)) {
+                    // Finger moving down means content should scroll up (direction -1).
+                    val direction = if (dy > 0f) -1 else 1
+                    view.canScrollVertically(direction)
+                } else {
+                    // Keep horizontal panning in WebView when horizontal scrolling is still possible.
+                    val direction = if (dx > 0f) -1 else 1
+                    view.canScrollHorizontally(direction)
+                }
+                view.parent?.requestDisallowInterceptTouchEvent(canScrollCurrentDirection)
+                lastX = event.x
+                lastY = event.y
+            }
+
+            MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
+                view.parent?.requestDisallowInterceptTouchEvent(false)
+            }
+        }
+        false
+    }
+}
 
 private fun WebContent.Url.signature(): Int {
     var result = url.hashCode()

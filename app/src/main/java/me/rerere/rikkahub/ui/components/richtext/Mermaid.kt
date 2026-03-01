@@ -39,6 +39,7 @@ import com.composables.icons.lucide.X
 import com.dokar.sonner.ToastType
 import me.rerere.rikkahub.R
 import me.rerere.rikkahub.ui.components.webview.WebView
+import me.rerere.rikkahub.ui.components.webview.enableDirectionalParentScrollHandoff
 import me.rerere.rikkahub.ui.components.webview.rememberWebViewState
 import me.rerere.rikkahub.ui.context.LocalToaster
 import me.rerere.rikkahub.ui.theme.LocalDarkMode
@@ -146,6 +147,9 @@ fun Mermaid(
                 .clip(RoundedCornerShape(4.dp))
                 .animateContentSize()
                 .height(height),
+            onCreated = {
+                it.enableDirectionalParentScrollHandoff()
+            },
             onUpdated = {
                 it.evaluateJavascript("calculateAndSendHeight();", null)
             }
@@ -232,7 +236,10 @@ fun Mermaid(
                     modifier = Modifier
                         .fillMaxWidth()
                         .height(400.dp)
-                        .clip(RoundedCornerShape(4.dp))
+                        .clip(RoundedCornerShape(4.dp)),
+                    onCreated = {
+                        it.enableDirectionalParentScrollHandoff()
+                    }
                 )
             }
         }
