@@ -109,12 +109,17 @@ internal fun WebRenderedCodeBlock(
             webView.setTag(R.id.tag_code_block_render_signature, renderSignature)
             var lastY = 0f
             var hasLastY = false
+            fun requestParentInterceptAfterTouch(view: android.view.View, disallow: Boolean) {
+                view.post {
+                    view.parent?.requestDisallowInterceptTouchEvent(disallow)
+                }
+            }
             webView.setOnTouchListener { view, event ->
                 when (event?.actionMasked) {
                     MotionEvent.ACTION_DOWN -> {
                         lastY = event.y
                         hasLastY = true
-                        view.parent?.requestDisallowInterceptTouchEvent(false)
+                        requestParentInterceptAfterTouch(view, false)
                     }
 
                     MotionEvent.ACTION_MOVE -> {
@@ -129,13 +134,13 @@ internal fun WebRenderedCodeBlock(
                             deltaY < 0f -> view.canScrollVertically(1)
                             else -> view.canScrollVertically(-1) || view.canScrollVertically(1)
                         }
-                        view.parent?.requestDisallowInterceptTouchEvent(canScrollInner)
+                        requestParentInterceptAfterTouch(view, canScrollInner)
                         lastY = event.y
                     }
 
                     MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
                         hasLastY = false
-                        view.parent?.requestDisallowInterceptTouchEvent(false)
+                        requestParentInterceptAfterTouch(view, false)
                     }
                 }
                 false
