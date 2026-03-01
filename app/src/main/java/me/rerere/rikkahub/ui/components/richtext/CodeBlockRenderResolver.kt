@@ -158,7 +158,8 @@ internal object CodeBlockRenderResolver {
             <style>
             :root{--TH-viewport-height:100vh;}
             *,*::before,*::after{box-sizing:border-box;}
-            html,body{margin:0!important;padding:0!important;overflow:hidden!important;max-width:100%!important;}
+            html,body{margin:0!important;padding:0!important;max-width:100%!important;}
+            html,body{overflow-y:auto!important;overflow-x:hidden!important;-webkit-overflow-scrolling:touch;}
             body{width:100%!important;}
             </style>
             <script>
