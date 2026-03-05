@@ -1,5 +1,6 @@
 package me.rerere.rikkahub.ui.activity
 
+import android.content.Context
 import android.util.Log
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -18,6 +19,13 @@ import me.rerere.ai.ui.MessageChunk
 import me.rerere.ai.ui.UIMessage
 import me.rerere.ai.ui.UIMessagePart
 import me.rerere.ai.ui.handleMessageChunk
+import me.rerere.rikkahub.data.ai.transformers.MessageTemplateInjectionTransformer
+import me.rerere.rikkahub.data.ai.transformers.PlaceholderTransformer
+import me.rerere.rikkahub.data.ai.transformers.PromptInjectionTransformer
+import me.rerere.rikkahub.data.ai.transformers.RegexPromptOnlyTransformer
+import me.rerere.rikkahub.data.ai.transformers.TemplateTransformer
+import me.rerere.rikkahub.data.ai.transformers.TimeReminderTransformer
+import me.rerere.rikkahub.data.ai.transformers.transforms
 import me.rerere.rikkahub.data.datastore.Settings
 import me.rerere.rikkahub.data.datastore.SettingsStore
 import me.rerere.rikkahub.data.datastore.findModelById
@@ -42,8 +50,10 @@ sealed interface TextSelectionState {
 }
 
 class TextSelectionVM(
+    private val context: Context,
     private val settingsStore: SettingsStore,
     private val providerManager: ProviderManager,
+    private val templateTransformer: TemplateTransformer,
 ) : ViewModel() {
     val settings = settingsStore.settingsFlow
         .stateIn(viewModelScope, kotlinx.coroutines.flow.SharingStarted.Eagerly, Settings.dummy())
@@ -144,10 +154,18 @@ class TextSelectionVM(
                 messages.add(UIMessage.system(prompt))
                 messages.add(UIMessage.user(selectedText))
 
+                val transformedMessages = messages.transforms(
+                    transformers = buildInputTransformers(),
+                    context = context,
+                    model = model,
+                    assistant = assistant,
+                    settings = currentSettings,
+                )
+
                 val provider = providerManager.getProviderByType(providerSetting)
                 provider.streamText(
                     providerSetting = providerSetting,
-                    messages = messages,
+                    messages = transformedMessages,
                     params = TextGenerationParams(
                         model = model,
                         temperature = assistant.temperature ?: 0.7f,
@@ -207,15 +225,21 @@ class TextSelectionVM(
             .replace("{{language}}", settings.textSelectionConfig.translateLanguage)
             .replace("{{custom_prompt}}", customPromptText)
 
-        if (action.id == "translate") {
-            return actionPrompt
-        }
         return if (assistantPrompt.isNotBlank()) {
             "$assistantPrompt\n\n$actionPrompt"
         } else {
             actionPrompt
         }
     }
+
+    private fun buildInputTransformers() = listOf(
+        TimeReminderTransformer,
+        MessageTemplateInjectionTransformer,
+        PromptInjectionTransformer,
+        PlaceholderTransformer,
+        templateTransformer,
+        RegexPromptOnlyTransformer,
+    )
 
     override fun onCleared() {
         super.onCleared()
