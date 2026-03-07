@@ -23,16 +23,7 @@ object DocumentAsPromptTransformer : InputMessageTransformer {
                         val documents = filterIsInstance<UIMessagePart.Document>()
                         if (documents.isNotEmpty()) {
                             documents.forEach { document ->
-                                val content = readDocumentContent(document)
-                                val prompt = """
-                  ## user sent a file: ${document.fileName}
-                  <content>
-                  ```
-                  $content
-                  ```
-                  </content>
-                  """.trimMargin()
-                                add(0, UIMessagePart.Text(prompt))
+                                add(0, UIMessagePart.Text(createDocumentPromptText(document)))
                             }
                         }
                     }
@@ -40,34 +31,55 @@ object DocumentAsPromptTransformer : InputMessageTransformer {
             }
         }
     }
+}
 
-    private fun parsePdfAsText(file: File): String {
-        return PdfParser.parserPdf(file)
+private fun parsePdfAsText(file: File): String {
+    return PdfParser.parserPdf(file)
+}
+
+private fun parseDocxAsText(file: File): String {
+    return DocxParser.parse(file)
+}
+
+private fun parsePptxAsText(file: File): String {
+    return PptxParser.parse(file)
+}
+
+internal fun createDocumentPromptText(document: UIMessagePart.Document): String {
+    return createDocumentPromptText(
+        document = document,
+        content = readDocumentContent(document)
+    )
+}
+
+internal fun createDocumentPromptText(
+    document: UIMessagePart.Document,
+    content: String,
+): String {
+    return """
+                  ## user sent a file: ${document.fileName}
+                  <content>
+                  ```
+                  $content
+                  ```
+                  </content>
+                  """.trimMargin()
+}
+
+internal fun readDocumentContent(document: UIMessagePart.Document): String {
+    val file = runCatching { document.url.toUri().toFile() }.getOrNull()
+        ?: return "[ERROR, invalid file uri: ${document.fileName}]"
+    if (!file.exists() || !file.isFile) {
+        return "[ERROR, file not found: ${document.fileName}]"
     }
-
-    private fun parseDocxAsText(file: File): String {
-        return DocxParser.parse(file)
-    }
-
-    private fun parsePptxAsText(file: File): String {
-        return PptxParser.parse(file)
-    }
-
-    private fun readDocumentContent(document: UIMessagePart.Document): String {
-        val file = runCatching { document.url.toUri().toFile() }.getOrNull()
-            ?: return "[ERROR, invalid file uri: ${document.fileName}]"
-        if (!file.exists() || !file.isFile) {
-            return "[ERROR, file not found: ${document.fileName}]"
+    return runCatching {
+        when (document.mime) {
+            "application/pdf" -> parsePdfAsText(file)
+            "application/vnd.openxmlformats-officedocument.wordprocessingml.document" -> parseDocxAsText(file)
+            "application/vnd.openxmlformats-officedocument.presentationml.presentation" -> parsePptxAsText(file)
+            else -> file.readText()
         }
-        return runCatching {
-            when (document.mime) {
-                "application/pdf" -> parsePdfAsText(file)
-                "application/vnd.openxmlformats-officedocument.wordprocessingml.document" -> parseDocxAsText(file)
-                "application/vnd.openxmlformats-officedocument.presentationml.presentation" -> parsePptxAsText(file)
-                else -> file.readText()
-            }
-        }.getOrElse {
-            "[ERROR, failed to read file: ${document.fileName}]"
-        }
+    }.getOrElse {
+        "[ERROR, failed to read file: ${document.fileName}]"
     }
 }

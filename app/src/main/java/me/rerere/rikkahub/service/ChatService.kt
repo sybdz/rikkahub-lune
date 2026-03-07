@@ -84,6 +84,7 @@ import me.rerere.rikkahub.data.datastore.getCurrentChatModel
 import me.rerere.rikkahub.data.files.FilesManager
 import me.rerere.rikkahub.data.model.Assistant
 import me.rerere.rikkahub.data.model.Conversation
+import me.rerere.rikkahub.data.model.MessageNode
 import me.rerere.rikkahub.data.model.ScheduledPromptTask
 import me.rerere.rikkahub.data.model.AssistantAffectScope
 import me.rerere.rikkahub.data.model.AssistantRegexApplyPhase
@@ -117,6 +118,11 @@ data class ScheduledTaskExecutionResult(
     val replyText: String,
     val modelId: Uuid?,
     val providerName: String,
+)
+
+private data class GenerationPreparation(
+    val conversation: Conversation,
+    val messageRange: IntRange?,
 )
 
 private val inputTransformers by lazy {
@@ -344,10 +350,6 @@ class ChatService(
                         parseResult = directCommand
                     )
                 } else if (answer) {
-                    maybeAutoCompressConversation(
-                        conversationId = conversationId,
-                        conversation = getConversationFlow(conversationId).value
-                    )
                     // 开始补全
                     handleMessageComplete(conversationId)
                 }
@@ -446,25 +448,120 @@ class ChatService(
         return context.getString(R.string.chat_page_termux_no_output)
     }
 
-    private suspend fun maybeAutoCompressConversation(
+    private suspend fun prepareConversationForCompletion(
         conversationId: Uuid,
         conversation: Conversation,
-    ) {
+        messageRange: IntRange?,
+    ): GenerationPreparation {
+        val normalizedMessageRange = messageRange?.let {
+            normalizeMessageRange(
+                messageRange = it,
+                messageCount = conversation.currentMessages.size
+            )
+        }
         val settings = settingsStore.settingsFlow.value
-        val inputTokenBudget = settings.compressAutoTriggerInputTokens?.takeIf { it > 0 } ?: return
-        if (estimateConversationInputTokens(conversation.currentMessages) < inputTokenBudget) return
+        val inputTokenBudget = settings.compressAutoTriggerInputTokens?.takeIf { it > 0 }
+            ?: return GenerationPreparation(conversation, normalizedMessageRange)
+        val messagesToSend = conversation.currentMessages.selectMessages(normalizedMessageRange)
+        if (messagesToSend.isEmpty()) {
+            return GenerationPreparation(conversation, normalizedMessageRange)
+        }
+
+        val allowPromptTokenReuse = normalizedMessageRange == null || normalizedMessageRange.first == 0
+        if (estimateConversationInputTokens(messagesToSend, allowPromptTokenReuse) < inputTokenBudget) {
+            return GenerationPreparation(conversation, normalizedMessageRange)
+        }
 
         val keepRecentMessages = settings.compressKeepRecentMessages.coerceAtLeast(1)
-        if (conversation.currentMessages.size <= keepRecentMessages) return
+        if (messagesToSend.size <= keepRecentMessages) {
+            return GenerationPreparation(conversation, normalizedMessageRange)
+        }
 
-        compressConversation(
-            conversationId = conversationId,
-            conversation = conversation,
-            additionalPrompt = "",
-            targetTokens = settings.compressTargetTokens.takeIf { it > 0 } ?: DEFAULT_COMPRESS_TARGET_TOKENS,
-            keepRecentMessages = keepRecentMessages,
-        ).onFailure {
+        val targetTokens = settings.compressTargetTokens.takeIf { it > 0 } ?: DEFAULT_COMPRESS_TARGET_TOKENS
+        val compressionResult = if (normalizedMessageRange == null) {
+            compressConversation(
+                conversationId = conversationId,
+                conversation = conversation,
+                additionalPrompt = "",
+                targetTokens = targetTokens,
+                keepRecentMessages = keepRecentMessages,
+            ).map {
+                GenerationPreparation(
+                    conversation = getConversationFlow(conversationId).value,
+                    messageRange = null
+                )
+            }
+        } else {
+            compressConversationRange(
+                conversationId = conversationId,
+                conversation = conversation,
+                messageRange = normalizedMessageRange,
+                additionalPrompt = "",
+                targetTokens = targetTokens,
+                keepRecentMessages = keepRecentMessages,
+            )
+        }
+
+        return compressionResult.getOrElse {
             addError(it, conversationId)
+            GenerationPreparation(
+                conversation = getConversationFlow(conversationId).value,
+                messageRange = normalizedMessageRange
+            )
+        }
+    }
+
+    private fun normalizeMessageRange(
+        messageRange: IntRange,
+        messageCount: Int,
+    ): IntRange {
+        val start = messageRange.first.coerceIn(0, messageCount)
+        val endExclusive = (messageRange.last + 1).coerceIn(start, messageCount)
+        return start..<endExclusive
+    }
+
+    private fun List<UIMessage>.selectMessages(messageRange: IntRange?): List<UIMessage> {
+        return if (messageRange == null) {
+            this
+        } else {
+            subList(messageRange.first, messageRange.last + 1)
+        }
+    }
+
+    private fun createMessageRange(start: Int, size: Int): IntRange {
+        return start..<(start + size)
+    }
+
+    private suspend fun compressConversationRange(
+        conversationId: Uuid,
+        conversation: Conversation,
+        messageRange: IntRange,
+        additionalPrompt: String,
+        targetTokens: Int,
+        keepRecentMessages: Int,
+    ): Result<GenerationPreparation> {
+        return compressMessagesToNodes(
+            messages = conversation.currentMessages.selectMessages(messageRange),
+            additionalPrompt = additionalPrompt,
+            targetTokens = targetTokens,
+            keepRecentMessages = keepRecentMessages,
+        ).mapCatching { compressedNodes ->
+            val newConversation = conversation.copy(
+                messageNodes = buildList {
+                    addAll(conversation.messageNodes.take(messageRange.first))
+                    addAll(compressedNodes)
+                    addAll(conversation.messageNodes.drop(messageRange.last + 1))
+                },
+                chatSuggestions = emptyList(),
+            )
+            saveConversation(conversationId, newConversation)
+            GenerationPreparation(
+                conversation = getConversationFlow(conversationId).value,
+                messageRange = createMessageRange(
+                    start = messageRange.first,
+                    size = compressedNodes.size
+                )
+            )
         }
     }
 
@@ -728,18 +825,21 @@ class ChatService(
 
     private suspend fun handleMessageComplete(
         conversationId: Uuid,
-        messageRange: ClosedRange<Int>? = null,
+        messageRange: IntRange? = null,
         notifyOnCompletion: Boolean = true
     ) {
         val settings = settingsStore.settingsFlow.first()
-        val conversation = getConversationFlow(conversationId).value
-        val assistant = settings.getAssistantById(conversation.assistantId) ?: settings.getCurrentAssistant()
+        val initialConversation = getConversationFlow(conversationId).value
+        val assistant = settings.getAssistantById(initialConversation.assistantId) ?: settings.getCurrentAssistant()
         val model = assistant.chatModelId?.let { settings.findModelById(it) } ?: settings.getCurrentChatModel() ?: return
         val mcpTools = mcpManager.getAvailableToolsForServers(assistant.mcpServers)
 
         runCatching {
             // reset suggestions
-            updateConversation(conversationId, conversation.copy(chatSuggestions = emptyList()))
+            updateConversation(
+                conversationId,
+                getConversationFlow(conversationId).value.copy(chatSuggestions = emptyList())
+            )
 
             // memory tool
             if (!model.abilities.contains(ModelAbility.TOOL)) {
@@ -753,18 +853,18 @@ class ChatService(
 
             // check invalid messages
             checkInvalidMessages(conversationId)
+            val preparedGeneration = prepareConversationForCompletion(
+                conversationId = conversationId,
+                conversation = getConversationFlow(conversationId).value,
+                messageRange = messageRange,
+            )
 
             // start generating
             generationHandler.generateText(
                 settings = settings,
                 model = model,
-                messages = conversation.currentMessages.let {
-                    if (messageRange != null) {
-                        it.subList(messageRange.start, messageRange.endInclusive + 1)
-                    } else {
-                        it
-                    }
-                },
+                messages = preparedGeneration.conversation.currentMessages
+                    .selectMessages(preparedGeneration.messageRange),
                 assistant = assistant,
                 memories = if (assistant.useGlobalMemory) {
                     memoryRepository.getGlobalMemories()
@@ -1010,7 +1110,25 @@ class ChatService(
         additionalPrompt: String,
         targetTokens: Int,
         keepRecentMessages: Int = DEFAULT_COMPRESS_KEEP_RECENT_MESSAGES
-    ): Result<Unit> = runCatching {
+    ): Result<Unit> = compressMessagesToNodes(
+        messages = conversation.currentMessages,
+        additionalPrompt = additionalPrompt,
+        targetTokens = targetTokens,
+        keepRecentMessages = keepRecentMessages,
+    ).mapCatching { newMessageNodes ->
+        val newConversation = conversation.copy(
+            messageNodes = newMessageNodes,
+            chatSuggestions = emptyList(),
+        )
+        saveConversation(conversationId, newConversation)
+    }
+
+    private suspend fun compressMessagesToNodes(
+        messages: List<UIMessage>,
+        additionalPrompt: String,
+        targetTokens: Int,
+        keepRecentMessages: Int = DEFAULT_COMPRESS_KEEP_RECENT_MESSAGES,
+    ): Result<List<MessageNode>> = runCatching {
         val settings = settingsStore.settingsFlow.first()
         val model = settings.findModelById(settings.compressModelId)
             ?: settings.getCurrentChatModel()
@@ -1019,22 +1137,18 @@ class ChatService(
             ?: throw IllegalStateException(context.getString(R.string.chat_page_compress_provider_not_found))
 
         val providerHandler = providerManager.getProviderByType(provider)
-
         val maxMessagesPerChunk = 256
-        val allMessages = conversation.currentMessages
 
-        // Split messages into those to compress and those to keep
         val messagesToCompress: List<UIMessage>
         val messagesToKeep: List<UIMessage>
 
-        if (keepRecentMessages > 0 && allMessages.size > keepRecentMessages) {
-            messagesToCompress = allMessages.dropLast(keepRecentMessages)
-            messagesToKeep = allMessages.takeLast(keepRecentMessages)
+        if (keepRecentMessages > 0 && messages.size > keepRecentMessages) {
+            messagesToCompress = messages.dropLast(keepRecentMessages)
+            messagesToKeep = messages.takeLast(keepRecentMessages)
         } else if (keepRecentMessages > 0) {
-            // Not enough messages to compress while keeping recent ones
             throw IllegalStateException(context.getString(R.string.chat_page_compress_not_enough_messages))
         } else {
-            messagesToCompress = allMessages
+            messagesToCompress = messages
             messagesToKeep = emptyList()
         }
 
@@ -1046,8 +1160,8 @@ class ChatService(
             return left + right
         }
 
-        suspend fun compressMessages(messages: List<UIMessage>): String {
-            val contentToCompress = messages.joinToString("\n\n") { it.summaryAsText() }
+        suspend fun compressChunk(chunk: List<UIMessage>): String {
+            val contentToCompress = chunk.joinToString("\n\n") { it.summaryAsText() }
             val prompt = settings.compressPrompt.applyPlaceholders(
                 "content" to contentToCompress,
                 "target_tokens" to targetTokens.toString(),
@@ -1071,23 +1185,16 @@ class ChatService(
 
         val compressedSummaries = coroutineScope {
             splitMessages(messagesToCompress)
-                .map { chunk -> async { compressMessages(chunk) } }
+                .map { chunk -> async { compressChunk(chunk) } }
                 .awaitAll()
         }
 
-        // Create new conversation with compressed history as multiple user messages + kept messages
-        val newMessageNodes = buildList {
+        buildList {
             compressedSummaries.forEach { summary ->
                 add(UIMessage.user(summary).toMessageNode())
             }
             addAll(messagesToKeep.map { it.toMessageNode() })
         }
-        val newConversation = conversation.copy(
-            messageNodes = newMessageNodes,
-            chatSuggestions = emptyList(),
-        )
-
-        saveConversation(conversationId, newConversation)
     }
 
     // ---- 通知 ----

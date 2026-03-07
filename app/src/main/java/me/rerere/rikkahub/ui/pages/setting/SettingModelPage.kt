@@ -168,11 +168,6 @@ private fun DefaultTranslationModelSetting(
     )
 
     if (showModal) {
-        var autoTriggerText by remember(settings.compressAutoTriggerInputTokens) {
-            mutableStateOf(settings.compressAutoTriggerInputTokens?.toString().orEmpty())
-        }
-        val autoTriggerValue = autoTriggerText.toIntOrNull()?.takeIf { it > 0 }
-        val isAutoTriggerValid = autoTriggerText.isBlank() || autoTriggerValue != null
         ModalBottomSheet(
             onDismissRequest = {
                 showModal = false
@@ -185,84 +180,6 @@ private fun DefaultTranslationModelSetting(
                     .padding(16.dp),
                 verticalArrangement = Arrangement.spacedBy(8.dp),
             ) {
-                FormItem(
-                    label = {
-                        Text(stringResource(R.string.setting_model_page_compress_auto_trigger_title))
-                    },
-                    description = {
-                        Text(stringResource(R.string.setting_model_page_compress_auto_trigger_desc))
-                    }
-                ) {
-                    OutlinedTextField(
-                        value = autoTriggerText,
-                        onValueChange = { value ->
-                            autoTriggerText = value
-                            when {
-                                value.isBlank() -> {
-                                    vm.updateSettings(
-                                        settings.copy(
-                                            compressAutoTriggerInputTokens = null
-                                        )
-                                    )
-                                }
-
-                                value.toIntOrNull()?.let { it > 0 } == true -> {
-                                    vm.updateSettings(
-                                        settings.copy(
-                                            compressAutoTriggerInputTokens = value.toInt()
-                                        )
-                                    )
-                                }
-                            }
-                        },
-                        modifier = Modifier.fillMaxWidth(),
-                        placeholder = {
-                            Text(stringResource(R.string.setting_model_page_compress_auto_trigger_disabled))
-                        },
-                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                        isError = !isAutoTriggerValid,
-                    )
-                }
-                FormItem(
-                    label = {
-                        Text(stringResource(R.string.setting_model_page_compress_target_tokens_title))
-                    },
-                    description = {
-                        Text(stringResource(R.string.setting_model_page_compress_target_tokens_desc))
-                    }
-                ) {
-                    OutlinedNumberInput(
-                        value = settings.compressTargetTokens,
-                        onValueChange = { value ->
-                            vm.updateSettings(
-                                settings.copy(
-                                    compressTargetTokens = value.coerceAtLeast(1)
-                                )
-                            )
-                        },
-                        modifier = Modifier.fillMaxWidth()
-                    )
-                }
-                FormItem(
-                    label = {
-                        Text(stringResource(R.string.setting_model_page_compress_keep_recent_title))
-                    },
-                    description = {
-                        Text(stringResource(R.string.setting_model_page_compress_keep_recent_desc))
-                    }
-                ) {
-                    OutlinedNumberInput(
-                        value = settings.compressKeepRecentMessages,
-                        onValueChange = { value ->
-                            vm.updateSettings(
-                                settings.copy(
-                                    compressKeepRecentMessages = value.coerceAtLeast(0)
-                                )
-                            )
-                        },
-                        modifier = Modifier.fillMaxWidth()
-                    )
-                }
                 FormItem(
                     label = {
                         Text(stringResource(R.string.setting_model_page_prompt))
@@ -681,6 +598,7 @@ private fun DefaultCompressModelSetting(
                     .padding(16.dp),
                 verticalArrangement = Arrangement.spacedBy(8.dp),
             ) {
+                CompressionDefaultsSettings(settings = settings, vm = vm)
                 FormItem(
                     label = {
                         Text(stringResource(R.string.setting_model_page_prompt))
@@ -715,6 +633,97 @@ private fun DefaultCompressModelSetting(
                 }
             }
         }
+    }
+}
+
+@Composable
+private fun CompressionDefaultsSettings(
+    settings: Settings,
+    vm: SettingVM
+) {
+    var autoTriggerText by remember(settings.compressAutoTriggerInputTokens) {
+        mutableStateOf(settings.compressAutoTriggerInputTokens?.toString().orEmpty())
+    }
+    val autoTriggerValue = autoTriggerText.toIntOrNull()?.takeIf { it > 0 }
+    val isAutoTriggerValid = autoTriggerText.isBlank() || autoTriggerValue != null
+
+    FormItem(
+        label = {
+            Text(stringResource(R.string.setting_model_page_compress_auto_trigger_title))
+        },
+        description = {
+            Text(stringResource(R.string.setting_model_page_compress_auto_trigger_desc))
+        }
+    ) {
+        OutlinedTextField(
+            value = autoTriggerText,
+            onValueChange = { value ->
+                autoTriggerText = value
+                when {
+                    value.isBlank() -> {
+                        vm.updateSettings(
+                            settings.copy(
+                                compressAutoTriggerInputTokens = null
+                            )
+                        )
+                    }
+
+                    value.toIntOrNull()?.let { it > 0 } == true -> {
+                        vm.updateSettings(
+                            settings.copy(
+                                compressAutoTriggerInputTokens = value.toInt()
+                            )
+                        )
+                    }
+                }
+            },
+            modifier = Modifier.fillMaxWidth(),
+            placeholder = {
+                Text(stringResource(R.string.setting_model_page_compress_auto_trigger_disabled))
+            },
+            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+            isError = !isAutoTriggerValid,
+        )
+    }
+    FormItem(
+        label = {
+            Text(stringResource(R.string.setting_model_page_compress_target_tokens_title))
+        },
+        description = {
+            Text(stringResource(R.string.setting_model_page_compress_target_tokens_desc))
+        }
+    ) {
+        OutlinedNumberInput(
+            value = settings.compressTargetTokens,
+            onValueChange = { value ->
+                vm.updateSettings(
+                    settings.copy(
+                        compressTargetTokens = value.coerceAtLeast(1)
+                    )
+                )
+            },
+            modifier = Modifier.fillMaxWidth()
+        )
+    }
+    FormItem(
+        label = {
+            Text(stringResource(R.string.setting_model_page_compress_keep_recent_title))
+        },
+        description = {
+            Text(stringResource(R.string.setting_model_page_compress_keep_recent_desc))
+        }
+    ) {
+        OutlinedNumberInput(
+            value = settings.compressKeepRecentMessages,
+            onValueChange = { value ->
+                vm.updateSettings(
+                    settings.copy(
+                        compressKeepRecentMessages = value.coerceAtLeast(0)
+                    )
+                )
+            },
+            modifier = Modifier.fillMaxWidth()
+        )
     }
 }
 
