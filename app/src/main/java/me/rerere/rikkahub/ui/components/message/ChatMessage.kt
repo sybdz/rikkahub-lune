@@ -69,6 +69,8 @@ import me.rerere.ai.provider.Model
 import me.rerere.ai.ui.UIMessage
 import me.rerere.ai.ui.UIMessageAnnotation
 import me.rerere.ai.ui.UIMessagePart
+import me.rerere.ai.ui.displayRole
+import me.rerere.ai.ui.isCompressionCheckpoint
 import me.rerere.ai.ui.isEmptyUIMessage
 import me.rerere.hugeicons.HugeIcons
 import me.rerere.hugeicons.stroke.File02
@@ -122,6 +124,8 @@ fun ChatMessage(
     onToolAnswer: ((toolCallId: String, answer: String) -> Unit)? = null,
 ) {
     val message = node.messages[node.selectIndex]
+    val isCompressionCheckpoint = message.isCompressionCheckpoint()
+    val displayRole = message.displayRole()
     val settings = LocalSettings.current.displaySetting
     val textStyle = LocalTextStyle.current.copy(
         fontSize = LocalTextStyle.current.fontSize * settings.fontSizeRatio,
@@ -134,10 +138,10 @@ fun ChatMessage(
     val colorScheme = MaterialTheme.colorScheme
     Column(
         modifier = modifier.fillMaxWidth(),
-        horizontalAlignment = if (message.role == MessageRole.USER) Alignment.End else Alignment.Start,
+        horizontalAlignment = if (displayRole == MessageRole.USER) Alignment.End else Alignment.Start,
         verticalArrangement = Arrangement.spacedBy(4.dp)
     ) {
-        if (!message.parts.isEmptyUIMessage()) {
+        if (!message.parts.isEmptyUIMessage() && !isCompressionCheckpoint) {
             Row(
                 modifier = Modifier
                     .fillMaxWidth(),
@@ -160,9 +164,16 @@ fun ChatMessage(
             }
         }
         ProvideTextStyle(textStyle) {
+            if (isCompressionCheckpoint) {
+                Text(
+                    text = stringResource(R.string.chat_message_compression_checkpoint),
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.primary.copy(alpha = 0.8f),
+                )
+            }
             MessagePartsBlock(
                 assistant = assistant,
-                role = message.role,
+                role = displayRole,
                 parts = message.parts,
                 annotations = message.annotations,
                 loading = loading,
@@ -170,7 +181,11 @@ fun ChatMessage(
                 onToolApproval = onToolApproval,
                 messageDepthFromEnd = messageDepthFromEnd,
                 onToolAnswer = onToolAnswer,
-                onUserMessageClick = if (message.role == MessageRole.USER) onEdit else null,
+                onUserMessageClick = if (displayRole == MessageRole.USER && !isCompressionCheckpoint) {
+                    onEdit
+                } else {
+                    null
+                },
             )
 
             message.translation?.let { translation ->
@@ -225,7 +240,7 @@ fun ChatMessage(
                 showSelectCopySheet = true
             },
             isFavorite = isFavorite,
-            onToggleFavorite = onToggleFavorite,
+            onToggleFavorite = if (isCompressionCheckpoint) null else onToggleFavorite,
             onWebViewPreview = {
                 val textContent = message.parts
                     .filterIsInstance<UIMessagePart.Text>()

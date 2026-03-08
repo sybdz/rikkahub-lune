@@ -7,11 +7,10 @@ import me.rerere.ai.ui.UIMessage
 import me.rerere.ai.ui.UIMessagePart
 import me.rerere.rikkahub.data.db.AppDatabase
 import me.rerere.rikkahub.data.model.Conversation
-import me.rerere.rikkahub.data.model.MessageNode
 import java.time.Instant
 
 data class MessageSearchResult(
-    val nodeId: String,
+    val nodeId: String?,
     val messageId: String,
     val conversationId: String,
     val title: String,
@@ -28,6 +27,24 @@ class MessageFtsManager(private val database: AppDatabase) {
     suspend fun indexConversation(conversation: Conversation) = withContext(Dispatchers.IO) {
         val conversationId = conversation.id.toString()
         db.execSQL("DELETE FROM message_fts WHERE conversation_id = ?", arrayOf(conversationId))
+
+        conversation.replacementHistory.forEach { checkpoint ->
+            val text = checkpoint.message.extractFtsText()
+            if (text.isNotBlank()) {
+                db.execSQL(
+                    "INSERT INTO message_fts(text, node_id, message_id, conversation_id, title, update_at) VALUES (?, ?, ?, ?, ?, ?)",
+                    arrayOf(
+                        text,
+                        null,
+                        checkpoint.message.id.toString(),
+                        conversationId,
+                        conversation.title,
+                        conversation.updateAt.toEpochMilli().toString(),
+                    )
+                )
+            }
+        }
+
         conversation.messageNodes.forEach { node ->
             node.messages.forEach { message ->
                 val text = message.extractFtsText()

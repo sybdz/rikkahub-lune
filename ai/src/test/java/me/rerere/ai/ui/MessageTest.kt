@@ -149,6 +149,24 @@ class MessageTest {
         assertEquals("<user_shell_command>\nline1\nline2\n</user_shell_command>", message.toText())
     }
 
+    @Test
+    fun `compression checkpoint should expose synthetic semantics without changing transport role`() {
+        val message = UIMessage(
+            role = MessageRole.USER,
+            parts = listOf(UIMessagePart.Text("Compressed summary")),
+            syntheticKind = UISyntheticKind.CompressionCheckpoint(
+                level = 2,
+                sourceMessageCount = 12
+            )
+        )
+
+        assertTrue(message.isSynthetic())
+        assertTrue(message.isCompressionCheckpoint())
+        assertEquals(MessageRole.USER, message.role)
+        assertEquals(MessageRole.ASSISTANT, message.displayRole())
+        assertTrue(message.summaryAsText().startsWith("[COMPRESSION_CHECKPOINT L2]:"))
+    }
+
     // ==================== isValidToUpload Tests ====================
 
     @Test

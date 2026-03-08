@@ -45,6 +45,7 @@ import dev.chrisbanes.haze.rememberHazeState
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 import me.rerere.ai.provider.Model
+import me.rerere.ai.ui.UISyntheticKind
 import me.rerere.ai.ui.UIMessagePart
 import me.rerere.hugeicons.HugeIcons
 import me.rerere.hugeicons.stroke.Cancel01
@@ -75,7 +76,13 @@ import org.koin.core.parameter.parametersOf
 import kotlin.uuid.Uuid
 
 @Composable
-fun ChatPage(id: Uuid, text: String?, files: List<Uri>, nodeId: Uuid? = null) {
+fun ChatPage(
+    id: Uuid,
+    text: String?,
+    files: List<Uri>,
+    nodeId: Uuid? = null,
+    showCompressionHistory: Boolean = false,
+) {
     val vm: ChatVM = koinViewModel(
         parameters = {
             parametersOf(id.toString())
@@ -144,18 +151,22 @@ fun ChatPage(id: Uuid, text: String?, files: List<Uri>, nodeId: Uuid? = null) {
     }
 
     val chatListState = rememberLazyListState()
-    LaunchedEffect(vm) {
-        if (nodeId == null && !vm.chatListInitialized && chatListState.layoutInfo.totalItemsCount > 0) {
+    LaunchedEffect(vm, showCompressionHistory) {
+        if (nodeId == null && !showCompressionHistory && !vm.chatListInitialized && chatListState.layoutInfo.totalItemsCount > 0) {
             chatListState.scrollToItem(chatListState.layoutInfo.totalItemsCount)
             vm.chatListInitialized = true
         }
     }
 
-    LaunchedEffect(nodeId, conversation.messageNodes.size) {
-        if (nodeId != null && conversation.messageNodes.isNotEmpty() && !vm.chatListInitialized) {
+    LaunchedEffect(showCompressionHistory, nodeId, conversation.messageNodes.size, conversation.replacementHistory.size) {
+        if (showCompressionHistory && !vm.chatListInitialized && chatListState.layoutInfo.totalItemsCount > 0) {
+            chatListState.scrollToItem(0)
+            vm.chatListInitialized = true
+        } else if (nodeId != null && conversation.messageNodes.isNotEmpty() && !vm.chatListInitialized) {
             val index = conversation.messageNodes.indexOfFirst { it.id == nodeId }
             if (index >= 0) {
-                chatListState.scrollToItem(index)
+                val compressionHistoryBannerCount = if (conversation.replacementHistory.isNotEmpty()) 1 else 0
+                chatListState.scrollToItem(index + compressionHistoryBannerCount)
             }
             vm.chatListInitialized = true
         }
@@ -188,6 +199,7 @@ fun ChatPage(id: Uuid, text: String?, files: List<Uri>, nodeId: Uuid? = null) {
                     errors = errors,
                     onDismissError = { vm.dismissError(it) },
                     onClearAllErrors = { vm.clearAllErrors() },
+                    showCompressionHistory = showCompressionHistory,
                 )
             }
         }
@@ -219,6 +231,7 @@ fun ChatPage(id: Uuid, text: String?, files: List<Uri>, nodeId: Uuid? = null) {
                     errors = errors,
                     onDismissError = { vm.dismissError(it) },
                     onClearAllErrors = { vm.clearAllErrors() },
+                    showCompressionHistory = showCompressionHistory,
                 )
             }
             BackHandler(drawerState.isOpen) {
@@ -244,6 +257,7 @@ private fun ChatPageContent(
     errors: List<ChatError>,
     onDismissError: (Uuid) -> Unit,
     onClearAllErrors: () -> Unit,
+    showCompressionHistory: Boolean,
 ) {
     val scope = rememberCoroutineScope()
     val toaster = LocalToaster.current
@@ -397,6 +411,7 @@ private fun ChatPageContent(
                 errors = errors,
                 onDismissError = onDismissError,
                 onClearAllErrors = onClearAllErrors,
+                expandCompressionHistoryByDefault = showCompressionHistory,
                 onRegenerate = {
                     vm.regenerateAtMessage(it)
                 },
@@ -443,7 +458,8 @@ private fun ChatPageContent(
                 onJumpToMessage = { index ->
                     previewMode = false
                     scope.launch {
-                        chatListState.animateScrollToItem(index)
+                        val compressionHistoryBannerCount = if (conversation.replacementHistory.isNotEmpty()) 1 else 0
+                        chatListState.animateScrollToItem(index + compressionHistoryBannerCount)
                     }
                 },
                 onToolApproval = { toolCallId, approved, reason ->
@@ -503,6 +519,12 @@ private fun TopBar(
                 color = Color.Transparent,
             ) {
                 Column {
+                    val compressedSourceMessageCount = conversation.replacementHistory.sumOf { checkpoint ->
+                        when (val kind = checkpoint.message.syntheticKind) {
+                            is UISyntheticKind.CompressionCheckpoint -> kind.sourceMessageCount.coerceAtLeast(1)
+                            null -> 1
+                        }
+                    }
                     val assistant = settings.getCurrentAssistant()
                     val model = settings.getCurrentChatModel()
                     val provider = model?.findProvider(providers = settings.providers, checkOverwrite = false)
@@ -518,6 +540,28 @@ private fun TopBar(
                             overflow = TextOverflow.Ellipsis,
                             maxLines = 1,
                             color = LocalContentColor.current.copy(0.65f),
+                            style = MaterialTheme.typography.labelSmall.copy(
+                                fontSize = 8.sp,
+                            )
+                        )
+                    }
+                    if (conversation.replacementHistory.isNotEmpty()) {
+                        Text(
+                            text = if (conversation.compressionRevisionCount > 0) {
+                                stringResource(
+                                    R.string.chat_compression_history_indicator_with_revisions,
+                                    compressedSourceMessageCount,
+                                    conversation.compressionRevisionCount
+                                )
+                            } else {
+                                stringResource(
+                                    R.string.chat_compression_history_indicator,
+                                    compressedSourceMessageCount
+                                )
+                            },
+                            overflow = TextOverflow.Ellipsis,
+                            maxLines = 1,
+                            color = MaterialTheme.colorScheme.tertiary,
                             style = MaterialTheme.typography.labelSmall.copy(
                                 fontSize = 8.sp,
                             )

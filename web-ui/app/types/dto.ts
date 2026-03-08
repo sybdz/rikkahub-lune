@@ -1,6 +1,7 @@
 import type { TokenUsage } from "./core";
 import type { UIMessageAnnotation } from "./annotations";
 import type { UIMessagePart } from "./parts";
+import type { UISyntheticKind } from "./message";
 
 export interface ConversationListDto {
   id: string;
@@ -44,6 +45,7 @@ export interface MessageDto {
   id: string;
   role: string;
   parts: UIMessagePart[];
+  syntheticKind?: UISyntheticKind | null;
   annotations?: UIMessageAnnotation[];
   createdAt: string;
   finishedAt?: string | null;
@@ -63,7 +65,8 @@ export interface ConversationDto {
   assistantId: string;
   title: string;
   messages: MessageNodeDto[];
-  truncateIndex: number;
+  replacementHistory: MessageDto[];
+  compressionRevisionCount: number;
   chatSuggestions: string[];
   isPinned: boolean;
   createAt: number;
@@ -96,7 +99,7 @@ export interface ConversationErrorEventDto {
 }
 
 export interface MessageSearchResultDto {
-  nodeId: string;
+  nodeId: string | null;
   messageId: string;
   conversationId: string;
   title: string;

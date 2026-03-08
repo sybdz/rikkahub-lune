@@ -19,7 +19,8 @@ export interface Conversation {
   assistantId: string;
   title: string;
   messageNodes: MessageNode[];
-  truncateIndex: number;
+  replacementHistory: UIMessage[];
+  compressionRevisionCount: number;
   chatSuggestions: string[];
   isPinned: boolean;
   createAt: number;

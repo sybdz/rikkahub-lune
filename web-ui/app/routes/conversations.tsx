@@ -46,7 +46,7 @@ import {
   type Settings,
   type UIMessagePart,
 } from "~/types";
-import { MessageSquare } from "lucide-react";
+import { ChevronDown, ChevronUp, MessageSquare } from "lucide-react";
 import Logo from "~/components/logo";
 import { AnimatePresence, motion } from "motion/react";
 import type { PanelImperativeHandle } from "react-resizable-panels";
@@ -136,6 +136,18 @@ function getQuickJumpPreview(
     case "text":
       return t("conversations.preview.empty_message");
   }
+}
+
+function getCompressionHistoryInfo(messages: MessageDto[]) {
+  return {
+    checkpointCount: messages.length,
+    sourceMessageCount: messages.reduce((sum, message) => {
+      if (message.syntheticKind?.type === "compression_checkpoint") {
+        return sum + Math.max(message.syntheticKind.sourceMessageCount, 1);
+      }
+      return sum + 1;
+    }, 0),
+  };
 }
 
 function isAttachmentPart(
@@ -528,6 +540,8 @@ const ConversationTimeline = React.memo(({
   isHomeRoute,
   detailLoading,
   detailError,
+  replacementHistory,
+  compressionRevisionCount,
   selectedNodeMessages,
   isGenerating,
   settings,
@@ -544,6 +558,8 @@ const ConversationTimeline = React.memo(({
   isHomeRoute: boolean;
   detailLoading: boolean;
   detailError: string | null;
+  replacementHistory: MessageDto[];
+  compressionRevisionCount: number;
   selectedNodeMessages: SelectedNodeMessage[];
   isGenerating: boolean;
   settings: Settings | null;
@@ -557,6 +573,7 @@ const ConversationTimeline = React.memo(({
   onToolApproval: (toolCallId: string, approved: boolean, reason: string, answer?: string) => Promise<void>;
 }) => {
   const { t } = useTranslation("page");
+  const [compressionExpanded, setCompressionExpanded] = React.useState(false);
   const canQuickJump =
     Boolean(activeId) && !detailLoading && !detailError && selectedNodeMessages.length > 1;
   const assistant = React.useMemo(() => {
@@ -577,6 +594,14 @@ const ConversationTimeline = React.memo(({
 
     return map;
   }, [settings]);
+  const compressionInfo = React.useMemo(
+    () => getCompressionHistoryInfo(replacementHistory),
+    [replacementHistory],
+  );
+
+  React.useEffect(() => {
+    setCompressionExpanded(false);
+  }, [activeId, replacementHistory.length]);
 
   return (
     <Conversation className="flex-1 min-h-0">
@@ -608,6 +633,83 @@ const ConversationTimeline = React.memo(({
             title={t("conversations.empty_state.no_message_title")}
             description={t("conversations.empty_state.no_message_description")}
           />
+        )}
+        {!detailLoading && !detailError && activeId && replacementHistory.length > 0 && (
+          <div className="rounded-2xl border bg-muted/40 p-4">
+            <div className="flex items-start justify-between gap-3">
+              <div className="min-w-0 space-y-1">
+                <div className="text-sm font-medium">
+                  {t("conversations.compression.active_title")}
+                </div>
+                <p className="text-sm text-muted-foreground">
+                  {compressionRevisionCount > 0
+                    ? t("conversations.compression.summary_with_revisions", {
+                        checkpoints: compressionInfo.checkpointCount,
+                        messages: compressionInfo.sourceMessageCount,
+                        revisions: compressionRevisionCount,
+                      })
+                    : t("conversations.compression.summary", {
+                        checkpoints: compressionInfo.checkpointCount,
+                        messages: compressionInfo.sourceMessageCount,
+                      })}
+                </p>
+              </div>
+              <Button
+                variant="ghost"
+                size="sm"
+                type="button"
+                className="shrink-0"
+                onClick={() => {
+                  setCompressionExpanded((value) => !value);
+                }}
+              >
+                {compressionExpanded ? (
+                  <>
+                    <ChevronUp className="size-4" />
+                    {t("conversations.compression.hide_details")}
+                  </>
+                ) : (
+                  <>
+                    <ChevronDown className="size-4" />
+                    {t("conversations.compression.show_details")}
+                  </>
+                )}
+              </Button>
+            </div>
+
+            {compressionExpanded ? (
+              <div className="mt-3 space-y-3">
+                {replacementHistory.map((message, index) => (
+                  <div key={message.id} className="rounded-xl border bg-background px-3 py-3">
+                    <div className="space-y-1">
+                      <div className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                        {t("conversations.compression.item_title", {
+                          index: index + 1,
+                        })}
+                      </div>
+                      {message.syntheticKind?.type === "compression_checkpoint" ? (
+                        <div className="text-xs text-muted-foreground">
+                          {t("conversations.compression.item_meta", {
+                            level: message.syntheticKind.level,
+                            messages: message.syntheticKind.sourceMessageCount,
+                          })}
+                        </div>
+                      ) : null}
+                    </div>
+                    <div className="mt-2 whitespace-pre-wrap text-sm text-foreground">
+                      {message.parts
+                        .filter(
+                          (part): part is Extract<UIMessagePart, { type: "text" }> => part.type === "text",
+                        )
+                        .map((part) => part.text.trim())
+                        .filter((text) => text.length > 0)
+                        .join("\n\n") || "[...]"}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ) : null}
+          </div>
         )}
         {!detailLoading &&
           !detailError &&
@@ -730,6 +832,10 @@ function ConversationsPageInner() {
 
   const activeConversation = conversations.find((item) => item.id === activeId);
   const chatSuggestions = detail?.chatSuggestions ?? [];
+  const compressionInfo = React.useMemo(
+    () => getCompressionHistoryInfo(detail?.replacementHistory ?? []),
+    [detail?.replacementHistory],
+  );
 
   React.useEffect(() => {
     const base = t("conversations.meta.title");
@@ -985,6 +1091,8 @@ function ConversationsPageInner() {
             isHomeRoute={isHomeRoute}
             detailLoading={detailLoading}
             detailError={detailError}
+            replacementHistory={detail?.replacementHistory ?? []}
+            compressionRevisionCount={detail?.compressionRevisionCount ?? 0}
             selectedNodeMessages={selectedNodeMessages}
             isGenerating={detail?.isGenerating ?? false}
             settings={settings}
@@ -1087,6 +1195,13 @@ function ConversationsPageInner() {
             {currentModel && currentProvider ? (
               <div className="truncate text-xs text-muted-foreground/80">
                 {`${getAssistantDisplayName(currentAssistant?.name)} / ${getModelDisplayName(currentModel.displayName, currentModel.modelId)} (${currentProvider.name})`}
+              </div>
+            ) : null}
+            {compressionInfo.checkpointCount > 0 ? (
+              <div className="truncate text-[11px] text-amber-700/80 dark:text-amber-300/80">
+                {t("conversations.compression.indicator", {
+                  messages: compressionInfo.sourceMessageCount,
+                })}
               </div>
             ) : null}
           </div>

@@ -20,7 +20,11 @@ import me.rerere.rikkahub.data.db.entity.ConversationEntity
 import me.rerere.rikkahub.data.db.entity.MessageNodeEntity
 import me.rerere.rikkahub.data.files.FilesManager
 import me.rerere.rikkahub.data.model.Conversation
+import me.rerere.rikkahub.data.model.ConversationCheckpoint
+import me.rerere.rikkahub.data.model.ConversationCompressionRevision
 import me.rerere.rikkahub.data.model.MessageNode
+import me.rerere.ai.ui.isCompressionCheckpoint
+import me.rerere.rikkahub.service.normalizeCompressionCheckpointMessage
 import me.rerere.rikkahub.utils.JsonInstant
 import java.time.Instant
 import kotlin.uuid.Uuid
@@ -271,6 +275,8 @@ class ConversationRepository(
             createAt = conversation.createAt.toEpochMilli(),
             updateAt = conversation.updateAt.toEpochMilli(),
             assistantId = conversation.assistantId.toString(),
+            replacementHistory = JsonInstant.encodeToString(conversation.replacementHistory),
+            compressionRevisions = JsonInstant.encodeToString(conversation.compressionRevisions),
             chatSuggestions = JsonInstant.encodeToString(conversation.chatSuggestions),
             isPinned = conversation.isPinned
         )
@@ -280,10 +286,17 @@ class ConversationRepository(
         conversationEntity: ConversationEntity,
         messageNodes: List<MessageNode>
     ): Conversation {
+        val normalizedNodes = messageNodes.filter { it.messages.isNotEmpty() }
+        val extractedReplacementHistory = extractLeadingCompressionCheckpoints(normalizedNodes)
+        val persistedReplacementHistory = decodeReplacementHistory(conversationEntity.replacementHistory)
+        val persistedCompressionRevisions = decodeCompressionRevisions(conversationEntity.compressionRevisions)
         return Conversation(
             id = Uuid.parse(conversationEntity.id),
             title = conversationEntity.title,
-            messageNodes = messageNodes.filter { it.messages.isNotEmpty() },
+            messageNodes = extractedReplacementHistory.visibleNodes,
+            replacementHistory = (persistedReplacementHistory + extractedReplacementHistory.checkpoints)
+                .distinctBy { it.message.id },
+            compressionRevisions = persistedCompressionRevisions,
             createAt = Instant.ofEpochMilli(conversationEntity.createAt),
             updateAt = Instant.ofEpochMilli(conversationEntity.updateAt),
             assistantId = Uuid.parse(conversationEntity.assistantId),
@@ -342,6 +355,7 @@ class ConversationRepository(
                 if (page.isEmpty()) break
                 page.forEach { entity ->
                     val messages = JsonInstant.decodeFromString<List<UIMessage>>(entity.messages)
+                        .map(::normalizeCompressionCheckpointMessage)
                     val nodeId = Uuid.parse(entity.id)
                     nodes.add(
                         MessageNode(
@@ -370,6 +384,44 @@ class ConversationRepository(
         }
         messageNodeDAO.insertAll(entities)
     }
+
+    private fun decodeReplacementHistory(serialized: String): List<ConversationCheckpoint> {
+        return runCatching {
+            JsonInstant.decodeFromString<List<ConversationCheckpoint>>(serialized)
+        }.getOrDefault(emptyList()).map { checkpoint ->
+            checkpoint.copy(message = normalizeCompressionCheckpointMessage(checkpoint.message))
+        }
+    }
+
+    private fun decodeCompressionRevisions(serialized: String): List<ConversationCompressionRevision> {
+        return runCatching {
+            JsonInstant.decodeFromString<List<ConversationCompressionRevision>>(serialized)
+        }.getOrDefault(emptyList()).map { revision ->
+            revision.copy(
+                previousCheckpoints = revision.previousCheckpoints.map { checkpoint ->
+                    checkpoint.copy(message = normalizeCompressionCheckpointMessage(checkpoint.message))
+                },
+                nextCheckpoints = revision.nextCheckpoints.map { checkpoint ->
+                    checkpoint.copy(message = normalizeCompressionCheckpointMessage(checkpoint.message))
+                }
+            )
+        }
+    }
+
+    private fun extractLeadingCompressionCheckpoints(nodes: List<MessageNode>): ExtractedReplacementHistory {
+        val checkpointNodes = nodes.takeWhile { node ->
+            node.currentMessage.isCompressionCheckpoint()
+        }
+        return ExtractedReplacementHistory(
+            checkpoints = checkpointNodes.map { node ->
+                ConversationCheckpoint(
+                    id = node.id,
+                    message = node.currentMessage
+                )
+            },
+            visibleNodes = nodes.drop(checkpointNodes.size),
+        )
+    }
 }
 
 /**
@@ -387,4 +439,9 @@ data class LightConversationEntity(
 data class ConversationPageResult(
     val items: List<Conversation>,
     val nextOffset: Int?,
+)
+
+private data class ExtractedReplacementHistory(
+    val checkpoints: List<ConversationCheckpoint>,
+    val visibleNodes: List<MessageNode>,
 )

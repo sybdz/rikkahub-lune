@@ -40,6 +40,7 @@ import me.rerere.ai.core.MessageRole
 import me.rerere.ai.provider.Model
 import me.rerere.ai.ui.UIMessage
 import me.rerere.ai.ui.UIMessagePart
+import me.rerere.ai.ui.isCompressionCheckpoint
 import me.rerere.hugeicons.HugeIcons
 import me.rerere.hugeicons.stroke.Copy01
 import me.rerere.hugeicons.stroke.Delete01
@@ -75,6 +76,7 @@ fun ColumnScope.ChatMessageActionButtons(
     onClearTranslation: (UIMessage) -> Unit = {},
 ) {
     val context = LocalContext.current
+    val isCompressionCheckpoint = message.isCompressionCheckpoint()
     var isPendingDelete by remember { mutableStateOf(false) }
     var showTranslateDialog by remember { mutableStateOf(false) }
     var showRegenerateConfirm by remember { mutableStateOf(false) }
@@ -100,21 +102,23 @@ fun ColumnScope.ChatMessageActionButtons(
                 .size(16.dp)
         )
 
-        Icon(
-            imageVector = HugeIcons.Refresh03,
-            contentDescription = stringResource(R.string.regenerate),
-            modifier = Modifier
-                .clip(CircleShape)
-                .clickable {
-                    if (message.role == MessageRole.USER) {
-                        showRegenerateConfirm = true
-                    } else {
-                        onRegenerate()
+        if (!isCompressionCheckpoint) {
+            Icon(
+                imageVector = HugeIcons.Refresh03,
+                contentDescription = stringResource(R.string.regenerate),
+                modifier = Modifier
+                    .clip(CircleShape)
+                    .clickable {
+                        if (message.role == MessageRole.USER) {
+                            showRegenerateConfirm = true
+                        } else {
+                            onRegenerate()
+                        }
                     }
-                }
-                .padding(8.dp)
-                .size(16.dp)
-        )
+                    .padding(8.dp)
+                    .size(16.dp)
+            )
+        }
 
         if (message.role == MessageRole.ASSISTANT) {
             val tts = LocalTTSState.current
@@ -237,6 +241,7 @@ fun ChatMessageActionsSheet(
     onWebViewPreview: () -> Unit,
     onDismissRequest: () -> Unit
 ) {
+    val isCompressionCheckpoint = message.isCompressionCheckpoint()
     ModalBottomSheet(
         onDismissRequest = onDismissRequest,
         sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
@@ -308,29 +313,31 @@ fun ChatMessageActionsSheet(
             }
 
             // Edit
-            Card(
-                onClick = {
-                    onDismissRequest()
-                    onEdit()
-                },
-                shape = MaterialTheme.shapes.medium
-            ) {
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(16.dp),
-                    modifier = Modifier
-                        .padding(16.dp)
-                        .fillMaxWidth()
+            if (!isCompressionCheckpoint) {
+                Card(
+                    onClick = {
+                        onDismissRequest()
+                        onEdit()
+                    },
+                    shape = MaterialTheme.shapes.medium
                 ) {
-                    Icon(
-                        imageVector = HugeIcons.Edit01,
-                        contentDescription = null,
-                        modifier = Modifier.padding(4.dp)
-                    )
-                    Text(
-                        text = stringResource(R.string.edit),
-                        style = MaterialTheme.typography.titleMedium,
-                    )
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(16.dp),
+                        modifier = Modifier
+                            .padding(16.dp)
+                            .fillMaxWidth()
+                    ) {
+                        Icon(
+                            imageVector = HugeIcons.Edit01,
+                            contentDescription = null,
+                            modifier = Modifier.padding(4.dp)
+                        )
+                        Text(
+                            text = stringResource(R.string.edit),
+                            style = MaterialTheme.typography.titleMedium,
+                        )
+                    }
                 }
             }
 
@@ -362,33 +369,35 @@ fun ChatMessageActionsSheet(
             }
 
             // Create a Fork
-            Card(
-                onClick = {
-                    onDismissRequest()
-                    onFork()
-                },
-                shape = MaterialTheme.shapes.medium,
-            ) {
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(16.dp),
-                    modifier = Modifier
-                        .padding(16.dp)
-                        .fillMaxWidth()
+            if (!isCompressionCheckpoint) {
+                Card(
+                    onClick = {
+                        onDismissRequest()
+                        onFork()
+                    },
+                    shape = MaterialTheme.shapes.medium,
                 ) {
-                    Icon(
-                        imageVector = HugeIcons.GitFork,
-                        contentDescription = null,
-                        modifier = Modifier.padding(4.dp)
-                    )
-                    Text(
-                        text = stringResource(R.string.create_fork),
-                        style = MaterialTheme.typography.titleMedium,
-                    )
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(16.dp),
+                        modifier = Modifier
+                            .padding(16.dp)
+                            .fillMaxWidth()
+                    ) {
+                        Icon(
+                            imageVector = HugeIcons.GitFork,
+                            contentDescription = null,
+                            modifier = Modifier.padding(4.dp)
+                        )
+                        Text(
+                            text = stringResource(R.string.create_fork),
+                            style = MaterialTheme.typography.titleMedium,
+                        )
+                    }
                 }
             }
 
-            if (onToggleFavorite != null) {
+            if (onToggleFavorite != null && !isCompressionCheckpoint) {
                 Card(
                     onClick = {
                         onDismissRequest()

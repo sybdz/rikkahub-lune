@@ -19,6 +19,7 @@
     "edit_message": "Edit message",
     "edit": "Edit",
     "regenerate": "Regenerate",
+    "compression_checkpoint": "Compressed Context",
     "previous_branch": "Previous branch",
     "next_branch": "Next branch",
     "more_actions": "More actions",

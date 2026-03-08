@@ -77,6 +77,7 @@ import kotlinx.serialization.json.jsonObject
 import me.rerere.ai.core.MessageRole
 import me.rerere.ai.ui.UIMessage
 import me.rerere.ai.ui.UIMessagePart
+import me.rerere.ai.ui.isCompressionCheckpoint
 import me.rerere.ai.ui.isEmptyUIMessage
 import me.rerere.ai.util.encodeBase64
 import me.rerere.common.android.appTempFolder
@@ -250,13 +251,20 @@ private fun exportToMarkdown(
     messages: List<UIMessage>
 ) {
     val filename = "chat-export-${LocalDateTime.now().toLocalString()}.md"
+    val exportedMessages = conversation.replacementHistoryMessages + messages
 
     val sb = buildAnnotatedString {
         append("# ${conversation.title}\n\n")
         append("*Exported on ${LocalDateTime.now().toLocalString()}*\n\n")
 
-        messages.forEach { message ->
-            val role = if (message.role == MessageRole.USER) "**User**" else "**Assistant**"
+        exportedMessages.forEach { message ->
+            val role = if (message.isCompressionCheckpoint()) {
+                "**Compressed Context**"
+            } else if (message.role == MessageRole.USER) {
+                "**User**"
+            } else {
+                "**Assistant**"
+            }
             append("$role:\n\n")
             message.parts.forEach { part ->
                 when (part) {

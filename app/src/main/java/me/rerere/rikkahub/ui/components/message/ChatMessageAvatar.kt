@@ -17,6 +17,8 @@ import kotlinx.datetime.toJavaLocalDateTime
 import me.rerere.ai.core.MessageRole
 import me.rerere.ai.provider.Model
 import me.rerere.ai.ui.UIMessage
+import me.rerere.ai.ui.displayRole
+import me.rerere.ai.ui.isCompressionCheckpoint
 import me.rerere.ai.ui.isEmptyUIMessage
 import me.rerere.rikkahub.R
 import me.rerere.rikkahub.data.model.Assistant
@@ -35,7 +37,12 @@ fun ChatMessageUserAvatar(
     modifier: Modifier = Modifier,
 ) {
     val settings = LocalSettings.current
-    if (message.role == MessageRole.USER && !message.parts.isEmptyUIMessage() && settings.displaySetting.showUserAvatar) {
+    if (message.isCompressionCheckpoint()) return
+
+    if (message.displayRole() == MessageRole.USER &&
+        !message.parts.isEmptyUIMessage() &&
+        settings.displaySetting.showUserAvatar
+    ) {
         Row(
             modifier = modifier.padding(vertical = 8.dp),
             horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.End),
@@ -80,7 +87,9 @@ fun ChatMessageAssistantAvatar(
 ) {
     val settings = LocalSettings.current
     val showIcon = settings.displaySetting.showModelIcon
-    if (message.role == MessageRole.ASSISTANT && model != null) {
+    if (message.isCompressionCheckpoint()) return
+
+    if (message.displayRole() == MessageRole.ASSISTANT && model != null) {
         Row(
             horizontalArrangement = Arrangement.spacedBy(12.dp),
             verticalAlignment = Alignment.CenterVertically,

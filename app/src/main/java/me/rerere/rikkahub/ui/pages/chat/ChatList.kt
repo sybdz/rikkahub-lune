@@ -84,6 +84,7 @@ import dev.chrisbanes.haze.hazeSource
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import me.rerere.ai.ui.UISyntheticKind
 import me.rerere.ai.ui.UIMessage
 import me.rerere.ai.ui.UIMessagePart
 import me.rerere.rikkahub.R
@@ -105,6 +106,7 @@ import kotlin.math.roundToInt
 import kotlin.uuid.Uuid
 
 private const val TAG = "ChatList"
+private const val CompressionHistoryKey = "CompressionHistoryKey"
 private const val LoadingIndicatorKey = "LoadingIndicator"
 private const val ScrollBottomKey = "ScrollBottomKey"
 
@@ -114,6 +116,25 @@ private fun UIMessage.previewText(): String {
         .joinToString("\n") { textPart ->
             TermuxUserShellCommandCodec.extractOutput(role, textPart) ?: textPart.text
         }
+}
+
+private data class CompressionHistoryInfo(
+    val checkpointCount: Int,
+    val sourceMessageCount: Int,
+    val revisionCount: Int,
+)
+
+private fun Conversation.getCompressionHistoryInfo(): CompressionHistoryInfo {
+    return CompressionHistoryInfo(
+        checkpointCount = replacementHistory.size,
+        sourceMessageCount = replacementHistory.sumOf { checkpoint ->
+            when (val kind = checkpoint.message.syntheticKind) {
+                is UISyntheticKind.CompressionCheckpoint -> kind.sourceMessageCount.coerceAtLeast(1)
+                null -> 1
+            }
+        },
+        revisionCount = compressionRevisionCount,
+    )
 }
 
 @Composable
@@ -128,6 +149,7 @@ fun ChatList(
     errors: List<ChatError> = emptyList(),
     onDismissError: (Uuid) -> Unit = {},
     onClearAllErrors: () -> Unit = {},
+    expandCompressionHistoryByDefault: Boolean = false,
     onRegenerate: (UIMessage) -> Unit = {},
     onEdit: (UIMessage) -> Unit = {},
     onForkMessage: (UIMessage) -> Unit = {},
@@ -168,6 +190,7 @@ fun ChatList(
                 errors = errors,
                 onDismissError = onDismissError,
                 onClearAllErrors = onClearAllErrors,
+                expandCompressionHistoryByDefault = expandCompressionHistoryByDefault,
                 onRegenerate = onRegenerate,
                 onEdit = onEdit,
                 onForkMessage = onForkMessage,
@@ -186,6 +209,110 @@ fun ChatList(
 }
 
 @Composable
+private fun CompressionHistoryBanner(
+    conversation: Conversation,
+    expanded: Boolean,
+    onToggleExpanded: () -> Unit,
+) {
+    val info = remember(conversation.replacementHistory) {
+        conversation.getCompressionHistoryInfo()
+    }
+
+    Surface(
+        onClick = onToggleExpanded,
+        shape = MaterialTheme.shapes.large,
+        color = MaterialTheme.colorScheme.surfaceContainerHigh,
+        modifier = Modifier.fillMaxWidth()
+    ) {
+        Column(
+            modifier = Modifier.padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp)
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = stringResource(R.string.chat_compression_history_active),
+                    style = MaterialTheme.typography.titleSmall,
+                )
+                Text(
+                    text = stringResource(
+                        if (expanded) {
+                            R.string.chat_compression_history_hide
+                        } else {
+                            R.string.chat_compression_history_show
+                        }
+                    ),
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.primary,
+                )
+            }
+            Text(
+                text = if (info.revisionCount > 0) {
+                    stringResource(
+                        R.string.chat_compression_history_summary_with_revisions,
+                        info.checkpointCount,
+                        info.sourceMessageCount,
+                        info.revisionCount,
+                    )
+                } else {
+                    stringResource(
+                        R.string.chat_compression_history_summary,
+                        info.checkpointCount,
+                        info.sourceMessageCount,
+                    )
+                },
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+
+            if (expanded) {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    conversation.replacementHistory.forEachIndexed { index, checkpoint ->
+                        val metadata = checkpoint.message.syntheticKind as? UISyntheticKind.CompressionCheckpoint
+                        Surface(
+                            shape = MaterialTheme.shapes.medium,
+                            color = MaterialTheme.colorScheme.surface,
+                        ) {
+                            Column(
+                                modifier = Modifier.padding(12.dp),
+                                verticalArrangement = Arrangement.spacedBy(6.dp)
+                            ) {
+                                Text(
+                                    text = stringResource(
+                                        R.string.chat_compression_history_item_title,
+                                        index + 1
+                                    ),
+                                    style = MaterialTheme.typography.labelLarge,
+                                )
+                                metadata?.let {
+                                    Text(
+                                        text = stringResource(
+                                            R.string.chat_compression_history_item_meta,
+                                            it.level,
+                                            it.sourceMessageCount,
+                                        ),
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    )
+                                }
+                                Text(
+                                    text = checkpoint.message.toText().ifBlank { "[...]" },
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurface,
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
 private fun ChatListNormal(
     innerPadding: PaddingValues,
     conversation: Conversation,
@@ -196,6 +323,7 @@ private fun ChatListNormal(
     errors: List<ChatError>,
     onDismissError: (Uuid) -> Unit,
     onClearAllErrors: () -> Unit,
+    expandCompressionHistoryByDefault: Boolean,
     onRegenerate: (UIMessage) -> Unit,
     onEdit: (UIMessage) -> Unit,
     onForkMessage: (UIMessage) -> Unit,
@@ -235,11 +363,18 @@ private fun ChatListNormal(
     // 对话大小警告对话框
     val sizeInfo = rememberConversationSizeInfo(conversation)
     var showSizeWarningDialog by rememberSaveable(conversation.id) { mutableStateOf(true) }
+    var compressionHistoryExpanded by rememberSaveable(conversation.id) { mutableStateOf(false) }
     if (sizeInfo.showWarning && showSizeWarningDialog) {
         ConversationSizeWarningDialog(
             sizeInfo = sizeInfo,
             onDismiss = { showSizeWarningDialog = false }
         )
+    }
+
+    LaunchedEffect(expandCompressionHistoryByDefault, conversation.replacementHistory.size) {
+        if (expandCompressionHistoryByDefault && conversation.replacementHistory.isNotEmpty()) {
+            compressionHistoryExpanded = true
+        }
     }
 
     Box(
@@ -283,6 +418,18 @@ private fun ChatListNormal(
                 .hazeSource(state = hazeState)
                 .padding(top = innerPadding.calculateTopPadding()),
         ) {
+            if (conversation.replacementHistory.isNotEmpty()) {
+                item(CompressionHistoryKey) {
+                    CompressionHistoryBanner(
+                        conversation = conversation,
+                        expanded = compressionHistoryExpanded,
+                        onToggleExpanded = {
+                            compressionHistoryExpanded = !compressionHistoryExpanded
+                        }
+                    )
+                }
+            }
+
             itemsIndexed(
                 items = conversation.messageNodes,
                 key = { index, item -> item.id },

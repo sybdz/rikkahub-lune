@@ -33,6 +33,16 @@
     },
     "header": {
       "select_conversation": "Select a conversation"
+    },
+    "compression": {
+      "active_title": "Compressed context active",
+      "indicator": "Compressed context active · {{messages}} messages summarized",
+      "summary": "{{checkpoints}} checkpoints summarize {{messages}} earlier messages. They remain in model context but are hidden from the visible timeline.",
+      "summary_with_revisions": "{{checkpoints}} checkpoints summarize {{messages}} earlier messages. Compression has been rewritten {{revisions}} times. They remain in model context but are hidden from the visible timeline.",
+      "show_details": "Show details",
+      "hide_details": "Hide details",
+      "item_title": "Compressed Context {{index}}",
+      "item_meta": "Level {{level}} · {{messages}} source messages"
     }
   }
 }

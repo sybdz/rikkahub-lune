@@ -12,12 +12,16 @@ import me.rerere.rikkahub.data.datastore.DEFAULT_ASSISTANT_ID
 import java.time.Instant
 import kotlin.uuid.Uuid
 
+private const val MAX_COMPRESSION_REVISIONS = 16
+
 @Serializable
 data class Conversation(
     val id: Uuid = Uuid.random(),
     val assistantId: Uuid,
     val title: String = "",
     val messageNodes: List<MessageNode>,
+    val replacementHistory: List<ConversationCheckpoint> = emptyList(),
+    val compressionRevisions: List<ConversationCompressionRevision> = emptyList(),
     val chatSuggestions: List<String> = emptyList(),
     val isPinned: Boolean = false,
     @Serializable(with = InstantSerializer::class)
@@ -33,6 +37,15 @@ data class Conversation(
             .collectAllParts()
             .mapNotNull { it.fileUri() }
 
+    val replacementHistoryMessages: List<UIMessage>
+        get() = replacementHistory.map(ConversationCheckpoint::message)
+
+    val compressionRevisionCount: Int
+        get() = compressionRevisions.size
+
+    val fullContextMessages: List<UIMessage>
+        get() = replacementHistoryMessages + currentMessages
+
     /**
      *  当前选中的 message
      */
@@ -40,6 +53,28 @@ data class Conversation(
         get(): List<UIMessage> {
             return messageNodes.map { node -> node.messages[node.selectIndex] }
         }
+
+    fun buildGenerationMessages(messageRange: IntRange? = null): List<UIMessage> {
+        return replacementHistoryMessages + currentMessages.selectMessages(messageRange)
+    }
+
+    fun recordCompressionRevision(
+        reason: CompressionRevisionReason,
+        previousCheckpoints: List<ConversationCheckpoint>,
+        nextCheckpoints: List<ConversationCheckpoint>,
+        compressedVisibleMessageCount: Int,
+        keptVisibleMessageCount: Int,
+    ): Conversation {
+        return copy(
+            compressionRevisions = (compressionRevisions + ConversationCompressionRevision(
+                reason = reason,
+                previousCheckpoints = previousCheckpoints,
+                nextCheckpoints = nextCheckpoints,
+                compressedVisibleMessageCount = compressedVisibleMessageCount.coerceAtLeast(0),
+                keptVisibleMessageCount = keptVisibleMessageCount.coerceAtLeast(0),
+            )).takeLast(MAX_COMPRESSION_REVISIONS)
+        )
+    }
 
     fun getMessageNodeByMessage(message: UIMessage): MessageNode? {
         return messageNodes.firstOrNull { node -> node.messages.contains(message) }
@@ -50,11 +85,16 @@ data class Conversation(
     }
 
     fun updateCurrentMessages(messages: List<UIMessage>): Conversation {
+        return updateCurrentMessages(startIndex = 0, messages = messages)
+    }
+
+    fun updateCurrentMessages(startIndex: Int, messages: List<UIMessage>): Conversation {
         val newNodes = this.messageNodes.toMutableList()
 
         messages.forEachIndexed { index, message ->
+            val nodeIndex = startIndex + index
             val node = newNodes
-                .getOrElse(index) { message.toMessageNode() }
+                .getOrElse(nodeIndex) { message.toMessageNode() }
 
             val newMessages = node.messages.toMutableList()
             var newMessageIndex = node.selectIndex
@@ -71,10 +111,10 @@ data class Conversation(
             )
 
             // 更新newNodes
-            if (index > newNodes.lastIndex) {
+            if (nodeIndex > newNodes.lastIndex) {
                 newNodes.add(newNode)
             } else {
-                newNodes[index] = newNode
+                newNodes[nodeIndex] = newNode
             }
         }
 
@@ -122,11 +162,44 @@ data class MessageNode(
     }
 }
 
+@Serializable
+data class ConversationCheckpoint(
+    val id: Uuid = Uuid.random(),
+    val message: UIMessage,
+)
+
+@Serializable
+enum class CompressionRevisionReason {
+    MANUAL,
+    AUTO_TRIGGER,
+    RANGE_REGENERATE,
+}
+
+@Serializable
+data class ConversationCompressionRevision(
+    val id: Uuid = Uuid.random(),
+    @Serializable(with = InstantSerializer::class)
+    val createdAt: Instant = Instant.now(),
+    val reason: CompressionRevisionReason,
+    val previousCheckpoints: List<ConversationCheckpoint> = emptyList(),
+    val nextCheckpoints: List<ConversationCheckpoint> = emptyList(),
+    val compressedVisibleMessageCount: Int = 0,
+    val keptVisibleMessageCount: Int = 0,
+)
+
 fun UIMessage.toMessageNode(): MessageNode {
     return MessageNode(
         messages = listOf(this),
         selectIndex = 0
     )
+}
+
+private fun List<UIMessage>.selectMessages(messageRange: IntRange?): List<UIMessage> {
+    return if (messageRange == null) {
+        this
+    } else {
+        subList(messageRange.first, messageRange.last + 1)
+    }
 }
 
 /**

@@ -4,6 +4,7 @@ import dayjs from "dayjs";
 import { Circle, Search } from "lucide-react";
 import { useTranslation } from "react-i18next";
 
+import { Badge } from "~/components/ui/badge";
 import { Button } from "~/components/ui/button";
 import {
   Dialog,
@@ -183,11 +184,18 @@ export function ConversationSearchButton({ onSelect }: ConversationSearchButtonP
                     setOpen(false);
                   }}
                 >
-                  <div className="min-w-0 flex-1">
-                    <div className="flex items-center justify-between gap-2">
-                      <span className="truncate text-sm font-medium">
-                        {item.title || t("conversation_search.unnamed_conversation")}
-                      </span>
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-center justify-between gap-2">
+                        <div className="flex min-w-0 items-center gap-2">
+                          <span className="truncate text-sm font-medium">
+                            {item.title || t("conversation_search.unnamed_conversation")}
+                          </span>
+                          {!item.nodeId ? (
+                            <Badge variant="secondary" className="shrink-0 text-[10px]">
+                              {t("conversation_search.compressed_context")}
+                            </Badge>
+                          ) : null}
+                        </div>
                       <span className="shrink-0 text-xs text-muted-foreground">
                         {formatRelativeTime(item.updateAt, t)}
                       </span>

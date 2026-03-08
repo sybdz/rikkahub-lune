@@ -33,6 +33,16 @@
     },
     "header": {
       "select_conversation": "请选择会话"
+    },
+    "compression": {
+      "active_title": "已启用压缩上下文",
+      "indicator": "已启用压缩上下文 · 已汇总 {{messages}} 条消息",
+      "summary": "{{checkpoints}} 个检查点汇总了更早的 {{messages}} 条消息。它们仍会继续发送给模型，但不会混在可见时间线里。",
+      "summary_with_revisions": "{{checkpoints}} 个检查点汇总了更早的 {{messages}} 条消息。压缩上下文已重写 {{revisions}} 次。它们仍会继续发送给模型，但不会混在可见时间线里。",
+      "show_details": "查看详情",
+      "hide_details": "收起详情",
+      "item_title": "已压缩上下文 {{index}}",
+      "item_meta": "压缩层级 {{level}} · 来源消息 {{messages}} 条"
     }
   }
 }

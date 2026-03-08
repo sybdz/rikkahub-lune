@@ -112,6 +112,10 @@ function hasEditableContent(parts: UIMessagePart[]): boolean {
   );
 }
 
+function isCompressionCheckpoint(message: MessageDto): boolean {
+  return message.syntheticKind?.type === "compression_checkpoint";
+}
+
 function formatNumber(value: number): string {
   return new Intl.NumberFormat().format(value);
 }
@@ -249,6 +253,7 @@ const ChatMessageActionsRow = React.memo(({
   onFork?: (messageId: string) => void | Promise<void>;
 }) => {
   const { t } = useTranslation("message");
+  const isCheckpoint = isCompressionCheckpoint(message);
   const [regenerating, setRegenerating] = React.useState(false);
   const [switchingBranch, setSwitchingBranch] = React.useState(false);
   const [deleting, setDeleting] = React.useState(false);
@@ -325,8 +330,10 @@ const ChatMessageActionsRow = React.memo(({
   const canSwitchBranch = Boolean(onSelectBranch) && node.messages.length > 1;
   const canEdit =
     Boolean(onEdit) &&
+    !isCheckpoint &&
     (message.role === "USER" || message.role === "ASSISTANT") &&
     hasEditableContent(message.parts);
+  const canRegenerate = Boolean(onRegenerate) && !isCheckpoint;
   const actionDisabled = loading || switchingBranch || regenerating || deleting || forking;
 
   return (
@@ -366,7 +373,7 @@ const ChatMessageActionsRow = React.memo(({
         </Button>
       )}
 
-      {onRegenerate && (
+      {canRegenerate && (
         <Button
           aria-label={t("chat_message.regenerate")}
           disabled={actionDisabled}
@@ -448,7 +455,7 @@ const ChatMessageActionsRow = React.memo(({
             <FileDown className="size-3.5" />
             {t("chat_message.export_markdown_with_reasoning")}
           </DropdownMenuItem>
-          {onFork && (
+          {onFork && !isCheckpoint && (
             <DropdownMenuItem
               disabled={actionDisabled}
               onSelect={() => {
@@ -525,7 +532,9 @@ export const ChatMessage = React.memo(({
   onFork,
   onToolApproval,
 }: ChatMessageProps) => {
-  const isUser = message.role === "USER";
+  const { t } = useTranslation("message");
+  const isCheckpoint = isCompressionCheckpoint(message);
+  const isUser = message.role === "USER" && !isCheckpoint;
   const hasMessageContent = message.parts.some(hasRenderablePart);
   const showActions = isLastMessage ? !loading : hasMessageContent;
   const citationUrlMap = React.useMemo(() => buildCitationUrlMap(message.parts), [message.parts]);
@@ -542,6 +551,7 @@ export const ChatMessage = React.memo(({
     <div
       className={cn("flex flex-col gap-4", isUser ? "items-end" : "items-start")}
       data-message-role={message.role.toLowerCase()}
+      data-message-kind={message.syntheticKind?.type}
       data-message-loading={loading || undefined}
     >
       <div className="flex w-full flex-col gap-2">
@@ -558,9 +568,18 @@ export const ChatMessage = React.memo(({
             data-message-bubble
             className={cn(
               "flex flex-col gap-2 text-sm",
-              isUser ? "max-w-[85%] rounded-lg bg-muted px-4 py-3" : "w-full",
+              isCheckpoint
+                ? "w-full rounded-lg border border-dashed border-primary/30 bg-primary/5 px-4 py-3"
+                : isUser
+                  ? "max-w-[85%] rounded-lg bg-muted px-4 py-3"
+                  : "w-full",
             )}
           >
+            {isCheckpoint ? (
+              <div className="text-[11px] font-medium uppercase tracking-[0.18em] text-primary/75">
+                {t("chat_message.compression_checkpoint")}
+              </div>
+            ) : null}
             <MessageParts
               parts={message.parts}
               loading={loading}

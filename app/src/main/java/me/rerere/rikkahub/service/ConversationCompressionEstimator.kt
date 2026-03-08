@@ -35,9 +35,14 @@ internal suspend fun estimateConversationInputTokens(
             val exactPromptTokens = messages[lastAssistantIndex].usage?.promptTokens ?: 0
             exactPromptTokens + messages.drop(lastAssistantIndex).sumOf(::estimateMessageTokens) + REQUEST_OVERHEAD_TOKENS
         } else {
-            messages.sumOf(::estimateMessageTokens) + REQUEST_OVERHEAD_TOKENS
+            estimateConversationInputTokensWithoutReuse(messages)
         }
     }
+}
+
+internal fun estimateConversationInputTokensWithoutReuse(messages: List<UIMessage>): Int {
+    if (messages.isEmpty()) return 0
+    return messages.sumOf(::estimateMessageTokens) + REQUEST_OVERHEAD_TOKENS
 }
 
 internal fun estimateMessageTokens(message: UIMessage): Int {

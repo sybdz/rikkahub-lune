@@ -67,6 +67,7 @@
     "searching": "搜索中...",
     "type_to_start": "输入关键词开始搜索",
     "no_results": "没有找到匹配的消息",
+    "compressed_context": "已压缩上下文",
     "unnamed_conversation": "未命名会话"
   },
   "quick_jump": {

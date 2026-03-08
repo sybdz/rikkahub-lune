@@ -67,6 +67,7 @@
     "searching": "Searching...",
     "type_to_start": "Type keywords to start searching",
     "no_results": "No matching messages found",
+    "compressed_context": "Compressed Context",
     "unnamed_conversation": "Untitled conversation"
   },
   "quick_jump": {

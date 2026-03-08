@@ -1149,6 +1149,16 @@
   <string name="chat_stats_duration_seconds">%1$s s</string>
   <string name="chat_message_previous">Previous</string>
   <string name="chat_message_next">Next</string>
+  <string name="chat_message_compression_checkpoint">Compressed Context</string>
+  <string name="chat_compression_history_active">Compressed context active</string>
+  <string name="chat_compression_history_indicator">Compressed context active · %1$d messages summarized</string>
+  <string name="chat_compression_history_indicator_with_revisions">Compressed context active · %1$d messages summarized · %2$d rewrites</string>
+  <string name="chat_compression_history_summary">%1$d checkpoints summarize %2$d earlier messages. They remain in model context but are hidden from the visible timeline.</string>
+  <string name="chat_compression_history_summary_with_revisions">%1$d checkpoints summarize %2$d earlier messages. Compression has been rewritten %3$d times. They remain in model context but are hidden from the visible timeline.</string>
+  <string name="chat_compression_history_show">Show details</string>
+  <string name="chat_compression_history_hide">Hide details</string>
+  <string name="chat_compression_history_item_title">Compressed Context %1$d</string>
+  <string name="chat_compression_history_item_meta">Level %1$d · %2$d source messages</string>
   <string name="setting_page_search_depth_basic">Basic</string>
   <string name="setting_page_search_depth_advanced">Advanced</string>
   <string name="setting_page_search_depth_standard">Standard</string>
@@ -1157,4 +1167,3 @@
   <string name="share_sheet_title">Share your LLM model</string>
   <string name="chat_page_export_image_failed">Failed to export image: %s</string>
 </resources>
-

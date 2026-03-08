@@ -5,6 +5,7 @@ import me.rerere.ai.core.TokenUsage
 import me.rerere.ai.ui.UIMessageAnnotation
 import me.rerere.ai.ui.UIMessage
 import me.rerere.ai.ui.UIMessagePart
+import me.rerere.ai.ui.UISyntheticKind
 import me.rerere.rikkahub.data.model.Conversation
 import me.rerere.rikkahub.data.model.MessageNode
 
@@ -150,6 +151,8 @@ data class ConversationDto(
     val assistantId: String,
     val title: String,
     val messages: List<MessageNodeDto>,
+    val replacementHistory: List<MessageDto>,
+    val compressionRevisionCount: Int,
     val chatSuggestions: List<String>,
     val isPinned: Boolean,
     val createAt: Long,
@@ -169,6 +172,7 @@ data class MessageDto(
     val id: String,
     val role: String,
     val parts: List<UIMessagePart>,
+    val syntheticKind: UISyntheticKind? = null,
     val annotations: List<UIMessageAnnotation> = emptyList(),
     val createdAt: String,
     val finishedAt: String? = null,
@@ -184,7 +188,7 @@ data class ForkConversationResponse(
 
 @Serializable
 data class MessageSearchResultDto(
-    val nodeId: String,
+    val nodeId: String?,
     val messageId: String,
     val conversationId: String,
     val title: String,
@@ -271,6 +275,8 @@ fun Conversation.toDto(isGenerating: Boolean = false) = ConversationDto(
     assistantId = assistantId.toString(),
     title = title,
     messages = messageNodes.map { it.toDto() },
+    replacementHistory = replacementHistoryMessages.map { it.toDto() },
+    compressionRevisionCount = compressionRevisionCount,
     chatSuggestions = chatSuggestions,
     isPinned = isPinned,
     createAt = createAt.toEpochMilli(),
@@ -288,6 +294,7 @@ fun UIMessage.toDto() = MessageDto(
     id = id.toString(),
     role = role.name,
     parts = parts,
+    syntheticKind = syntheticKind,
     annotations = annotations,
     createdAt = createdAt.toString(),
     finishedAt = finishedAt?.toString(),

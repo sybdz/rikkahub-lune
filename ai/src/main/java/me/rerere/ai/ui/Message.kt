@@ -17,10 +17,21 @@ import kotlin.uuid.Uuid
 
 // 公共消息抽象, 具体的Provider实现会转换为API接口需要的DTO
 @Serializable
+sealed class UISyntheticKind {
+    @Serializable
+    @SerialName("compression_checkpoint")
+    data class CompressionCheckpoint(
+        val level: Int,
+        val sourceMessageCount: Int,
+    ) : UISyntheticKind()
+}
+
+@Serializable
 data class UIMessage(
     val id: Uuid = Uuid.random(),
     val role: MessageRole,
     val parts: List<UIMessagePart>,
+    val syntheticKind: UISyntheticKind? = null,
     val annotations: List<UIMessageAnnotation> = emptyList(),
     val createdAt: LocalDateTime = Clock.System.now()
         .toLocalDateTime(TimeZone.currentSystemDefault()),
@@ -148,7 +159,11 @@ data class UIMessage(
     }
 
     fun summaryAsText(): String {
-        return "[${role.name}]: " + parts.joinToString(separator = "\n") { part ->
+        val prefix = when (val kind = syntheticKind) {
+            is UISyntheticKind.CompressionCheckpoint -> "[COMPRESSION_CHECKPOINT L${kind.level}]"
+            null -> "[${role.name}]"
+        }
+        return "$prefix: " + parts.joinToString(separator = "\n") { part ->
             when (part) {
                 is UIMessagePart.Text -> part.text
                 else -> ""
@@ -223,6 +238,14 @@ data class UIMessage(
         return match.groupValues[1].removeSuffix("\n")
     }
 }
+
+fun UIMessage.isSynthetic(): Boolean = syntheticKind != null
+
+fun UIMessage.isCompressionCheckpoint(): Boolean =
+    syntheticKind is UISyntheticKind.CompressionCheckpoint
+
+fun UIMessage.displayRole(): MessageRole =
+    if (isCompressionCheckpoint()) MessageRole.ASSISTANT else role
 
 /**
  * 处理MessageChunk合并

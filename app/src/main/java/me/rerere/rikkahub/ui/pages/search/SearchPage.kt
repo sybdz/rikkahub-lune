@@ -197,7 +197,8 @@ fun SearchPage(vm: SearchVM = koinViewModel()) {
                                         navigateToChatPage(
                                             navController,
                                             chatId = Uuid.parse(result.conversationId),
-                                            nodeId = Uuid.parse(result.nodeId),
+                                            nodeId = result.nodeId?.let(Uuid::parse),
+                                            showCompressionHistory = result.nodeId == null,
                                         )
                                     }
                                 )
@@ -261,6 +262,13 @@ private fun SearchResultItem(
                 style = MaterialTheme.typography.titleSmall,
                 color = MaterialTheme.colorScheme.onSurface,
             )
+            if (result.nodeId == null) {
+                Text(
+                    text = stringResource(R.string.chat_message_compression_checkpoint),
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.tertiary,
+                )
+            }
             Text(
                 text = snippetText,
                 style = MaterialTheme.typography.bodySmall,

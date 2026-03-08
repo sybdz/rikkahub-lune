@@ -1,10 +1,31 @@
 import type { ConversationDto, MessageDto } from "~/types";
 
+function getRoleLabel(message: MessageDto): string {
+  if (message.syntheticKind?.type === "compression_checkpoint") {
+    return "## Compressed Context";
+  }
+
+  if (message.role === "USER") {
+    return "## User";
+  }
+
+  if (message.role === "ASSISTANT") {
+    return "## Assistant";
+  }
+
+  return `## ${message.role}`;
+}
+
 export function convertMessageToMarkdown(
   message: MessageDto,
   includeReasoning: boolean,
 ): string {
   const lines: string[] = [];
+
+  if (message.syntheticKind?.type === "compression_checkpoint") {
+    lines.push("## Compressed Context");
+    lines.push("");
+  }
 
   for (const part of message.parts) {
     if (part.type === "text" && part.text.trim()) {
@@ -33,24 +54,20 @@ export function convertConversationToMarkdown(
   includeReasoning: boolean,
 ): string {
   const lines: string[] = [];
+  const allMessages = [
+    ...detail.replacementHistory,
+    ...detail.messages
+      .map((node) => node.messages[node.selectIndex] ?? node.messages[0])
+      .filter((message): message is MessageDto => Boolean(message)),
+  ];
 
   if (detail.title) {
     lines.push(`# ${detail.title}`);
     lines.push("");
   }
 
-  for (const node of detail.messages) {
-    const message = node.messages[node.selectIndex] ?? node.messages[0];
-    if (!message) continue;
-
-    const roleLabel =
-      message.role === "USER"
-        ? "## User"
-        : message.role === "ASSISTANT"
-          ? "## Assistant"
-          : `## ${message.role}`;
-
-    lines.push(roleLabel);
+  for (const message of allMessages) {
+    lines.push(getRoleLabel(message));
     lines.push("");
 
     for (const part of message.parts) {

@@ -13,6 +13,10 @@ export interface ChatMessageAvatarRowProps {
   model?: ProviderModel | null;
 }
 
+function isCompressionCheckpoint(message: MessageDto): boolean {
+  return message.syntheticKind?.type === "compression_checkpoint";
+}
+
 function formatMessageTimestamp(createdAt: string, locale?: string): string | null {
   const timestamp = Date.parse(createdAt);
   if (Number.isNaN(timestamp)) return null;
@@ -34,6 +38,10 @@ export function ChatMessageAvatarRow({
   const displaySetting = useSettingsStore((state) => state.settings?.displaySetting);
 
   if (!hasMessageContent) {
+    return null;
+  }
+
+  if (isCompressionCheckpoint(message)) {
     return null;
   }
 

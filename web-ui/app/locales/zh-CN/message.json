@@ -19,6 +19,7 @@
     "edit_message": "编辑消息",
     "edit": "编辑",
     "regenerate": "重新生成",
+    "compression_checkpoint": "已压缩上下文",
     "previous_branch": "上一分支",
     "next_branch": "下一分支",
     "more_actions": "更多操作",
