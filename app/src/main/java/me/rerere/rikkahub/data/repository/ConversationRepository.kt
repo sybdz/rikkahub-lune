@@ -408,20 +408,6 @@ class ConversationRepository(
         }
     }
 
-    private fun extractLeadingCompressionCheckpoints(nodes: List<MessageNode>): ExtractedReplacementHistory {
-        val checkpointNodes = nodes.takeWhile { node ->
-            node.currentMessage.isCompressionCheckpoint()
-        }
-        return ExtractedReplacementHistory(
-            checkpoints = checkpointNodes.map { node ->
-                ConversationCheckpoint(
-                    id = node.id,
-                    message = node.currentMessage
-                )
-            },
-            visibleNodes = nodes.drop(checkpointNodes.size),
-        )
-    }
 }
 
 /**
@@ -441,7 +427,22 @@ data class ConversationPageResult(
     val nextOffset: Int?,
 )
 
-private data class ExtractedReplacementHistory(
+internal fun extractLeadingCompressionCheckpoints(nodes: List<MessageNode>): ExtractedReplacementHistory {
+    val checkpointNodes = nodes.takeWhile { node ->
+        node.currentMessage.isCompressionCheckpoint()
+    }
+    return ExtractedReplacementHistory(
+        checkpoints = checkpointNodes.map { node ->
+            ConversationCheckpoint(
+                id = node.id,
+                message = node.currentMessage
+            )
+        },
+        visibleNodes = nodes.drop(checkpointNodes.size),
+    )
+}
+
+internal data class ExtractedReplacementHistory(
     val checkpoints: List<ConversationCheckpoint>,
     val visibleNodes: List<MessageNode>,
 )

@@ -4,6 +4,8 @@ import me.rerere.ai.core.MessageRole
 import me.rerere.ai.ui.UIMessage
 import me.rerere.rikkahub.service.createCompressionCheckpointMessage
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class ConversationTest {
@@ -102,5 +104,29 @@ class ConversationTest {
         assertEquals(CompressionRevisionReason.AUTO_TRIGGER, conversation.compressionRevisions.last().reason)
         assertEquals(22, conversation.compressionRevisions.last().compressedVisibleMessageCount)
         assertEquals(2, conversation.compressionRevisions.last().keptVisibleMessageCount)
+    }
+
+    @Test
+    fun `referencesReplacementHistoryNode should resolve legacy checkpoint ids`() {
+        val legacyNodeId = kotlin.uuid.Uuid.random()
+        val conversation = Conversation.ofId(
+            id = kotlin.uuid.Uuid.random(),
+            messages = listOf(UIMessage.user("u1").toMessageNode())
+        ).copy(
+            replacementHistory = listOf(
+                ConversationCheckpoint(
+                    id = legacyNodeId,
+                    message = createCompressionCheckpointMessage(
+                        summary = "Earlier context",
+                        level = 2,
+                        sourceMessageCount = 12
+                    )
+                )
+            )
+        )
+
+        assertTrue(conversation.referencesReplacementHistoryNode(legacyNodeId))
+        assertFalse(conversation.referencesReplacementHistoryNode(kotlin.uuid.Uuid.random()))
+        assertFalse(conversation.referencesReplacementHistoryNode(null))
     }
 }

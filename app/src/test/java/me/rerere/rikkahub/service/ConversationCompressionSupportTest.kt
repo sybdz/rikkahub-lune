@@ -113,6 +113,31 @@ class ConversationCompressionSupportTest {
     }
 
     @Test
+    fun `combineCompressedChunkSummaries should preserve per chunk source counts across rounds`() {
+        val firstRound = combineCompressedChunkSummaries(
+            chunkedEntries = listOf(
+                listOf(
+                    CompressionTranscriptEntry("entry-1", 2),
+                    CompressionTranscriptEntry("entry-2", 3)
+                ),
+                listOf(
+                    CompressionTranscriptEntry("entry-3", 5)
+                )
+            ),
+            summaries = listOf("summary-1", "summary-2")
+        )
+
+        assertEquals(listOf(5, 5), firstRound.map(CompressionTranscriptEntry::sourceMessageCount))
+
+        val secondRound = combineCompressedChunkSummaries(
+            chunkedEntries = listOf(firstRound),
+            summaries = listOf("summary-final")
+        )
+
+        assertEquals(10, secondRound.single().sourceMessageCount)
+    }
+
+    @Test
     fun `splitMessagesForCompression should keep configured tail without budget`() {
         val messages = List(6) { index ->
             if (index % 2 == 0) UIMessage.user("message-$index") else UIMessage.assistant("message-$index")

@@ -1321,12 +1321,12 @@ class ChatService(
                 ?: throw IllegalStateException(context.getString(R.string.chat_page_compress_summary_failed))
         }
 
-        var compressionEntries = messages.map(UIMessage::toCompressionTranscript)
+        var compressionEntries = messages.map(UIMessage::toCompressionTranscriptEntry)
         var compressionLevel = 0
         var didCallCompressor = false
 
         while (compressionEntries.size > 1 && compressionLevel < maxCompressionLevels) {
-            val chunkedEntries = chunkCompressionEntries(
+            val chunkedEntries = chunkCompressionTranscriptEntries(
                 entries = compressionEntries,
                 targetTokens = targetTokens,
             )
@@ -1335,29 +1335,40 @@ class ChatService(
             val compressedSummaries = coroutineScope {
                 chunkedEntries.map { chunk ->
                     async {
-                        compressChunk(chunk.joinToString(separator = "\n\n"))
+                        compressChunk(chunk.joinToString(separator = "\n\n") { it.transcript })
                     }
                 }.awaitAll()
             }
+            val compressedEntries = combineCompressedChunkSummaries(
+                chunkedEntries = chunkedEntries,
+                summaries = compressedSummaries,
+            )
 
             didCallCompressor = true
-            if (compressedSummaries.size >= compressionEntries.size && chunkedEntries.all { it.size == 1 }) {
-                compressionEntries = compressedSummaries
+            if (compressedEntries.size >= compressionEntries.size && chunkedEntries.all { it.size == 1 }) {
+                compressionEntries = compressedEntries
                 break
             }
 
-            compressionEntries = compressedSummaries
+            compressionEntries = compressedEntries
             compressionLevel++
         }
 
         if (compressionEntries.isEmpty()) {
             compressionEntries = listOf(
-                compressChunk(messages.joinToString("\n\n") { it.toCompressionTranscript() })
+                CompressionTranscriptEntry(
+                    transcript = compressChunk(messages.joinToString("\n\n") { it.toCompressionTranscript() }),
+                    sourceMessageCount = sourceMessageCount,
+                )
             )
             didCallCompressor = true
         } else if (!didCallCompressor) {
+            val entry = compressionEntries.single()
             compressionEntries = listOf(
-                compressChunk(compressionEntries.single())
+                CompressionTranscriptEntry(
+                    transcript = compressChunk(entry.transcript),
+                    sourceMessageCount = entry.sourceMessageCount,
+                )
             )
             didCallCompressor = true
             compressionLevel = compressionLevel.coerceAtLeast(1)
@@ -1367,12 +1378,12 @@ class ChatService(
             baseCompressionLevel + 1,
             compressionLevel.coerceAtLeast(1)
         )
-        compressionEntries.map { summary ->
+        compressionEntries.map { entry ->
             ConversationCheckpoint(
                 message = createCompressionCheckpointMessage(
-                    summary = summary,
+                    summary = entry.transcript,
                     level = checkpointLevel,
-                    sourceMessageCount = sourceMessageCount,
+                    sourceMessageCount = entry.sourceMessageCount,
                 )
             )
         }

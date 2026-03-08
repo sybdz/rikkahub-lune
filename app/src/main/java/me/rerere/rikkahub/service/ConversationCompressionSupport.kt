@@ -32,6 +32,11 @@ internal data class CompressionMessageSplit(
     val messagesToKeep: List<UIMessage>,
 )
 
+internal data class CompressionTranscriptEntry(
+    val transcript: String,
+    val sourceMessageCount: Int,
+)
+
 internal data class ConversationCompressionPlan(
     val messagesToCompress: List<UIMessage>,
     val visibleMessagesToKeep: List<UIMessage>,
@@ -260,6 +265,13 @@ internal fun UIMessage.effectiveCompressionLevel(): Int {
         ?: 0
 }
 
+internal fun UIMessage.toCompressionTranscriptEntry(): CompressionTranscriptEntry {
+    return CompressionTranscriptEntry(
+        transcript = toCompressionTranscript(),
+        sourceMessageCount = effectiveCompressionSourceMessageCount(),
+    )
+}
+
 private fun buildConversationCompressionPlan(
     replacementHistoryMessages: List<UIMessage>,
     visibleMessages: List<UIMessage>,
@@ -280,17 +292,48 @@ internal fun chunkCompressionEntries(
     entries: List<String>,
     targetTokens: Int,
 ): List<List<String>> {
+    return chunkCompressionItems(entries, targetTokens, itemToText = { it })
+}
+
+internal fun chunkCompressionTranscriptEntries(
+    entries: List<CompressionTranscriptEntry>,
+    targetTokens: Int,
+): List<List<CompressionTranscriptEntry>> {
+    return chunkCompressionItems(entries, targetTokens, itemToText = CompressionTranscriptEntry::transcript)
+}
+
+internal fun combineCompressedChunkSummaries(
+    chunkedEntries: List<List<CompressionTranscriptEntry>>,
+    summaries: List<String>,
+): List<CompressionTranscriptEntry> {
+    require(chunkedEntries.size == summaries.size) {
+        "chunkedEntries.size=${chunkedEntries.size} must match summaries.size=${summaries.size}"
+    }
+
+    return summaries.mapIndexed { index, summary ->
+        CompressionTranscriptEntry(
+            transcript = summary,
+            sourceMessageCount = chunkedEntries[index].sumOf(CompressionTranscriptEntry::sourceMessageCount),
+        )
+    }
+}
+
+private fun <T> chunkCompressionItems(
+    entries: List<T>,
+    targetTokens: Int,
+    itemToText: (T) -> String,
+): List<List<T>> {
     if (entries.isEmpty()) return emptyList()
 
     val chunkInputTokenBudget = (targetTokens * COMPRESSION_CHUNK_TOKEN_MULTIPLIER)
         .coerceAtLeast(COMPRESSION_MIN_CHUNK_INPUT_TOKENS)
 
-    val chunks = mutableListOf<MutableList<String>>()
-    var currentChunk = mutableListOf<String>()
+    val chunks = mutableListOf<MutableList<T>>()
+    var currentChunk = mutableListOf<T>()
     var currentChunkTokens = 0
 
     entries.forEach { entry ->
-        val entryTokens = estimateTextTokens(entry)
+        val entryTokens = estimateTextTokens(itemToText(entry))
         val exceedsChunkBudget = currentChunkTokens > 0 &&
             currentChunkTokens + entryTokens > chunkInputTokenBudget
         val exceedsChunkCount = currentChunk.size >= COMPRESSION_MAX_ENTRIES_PER_CHUNK

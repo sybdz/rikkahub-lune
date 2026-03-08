@@ -98,6 +98,8 @@ fun ChatPage(
     val currentChatModel by vm.currentChatModel.collectAsStateWithLifecycle()
     val enableWebSearch by vm.enableWebSearch.collectAsStateWithLifecycle()
     val errors by vm.errors.collectAsStateWithLifecycle()
+    val opensLegacyCompressionCheckpoint = conversation.referencesReplacementHistoryNode(nodeId)
+    val effectiveShowCompressionHistory = showCompressionHistory || opensLegacyCompressionCheckpoint
 
     val drawerState = rememberDrawerState(initialValue = DrawerValue.Closed)
     val softwareKeyboardController = LocalSoftwareKeyboardController.current
@@ -151,15 +153,15 @@ fun ChatPage(
     }
 
     val chatListState = rememberLazyListState()
-    LaunchedEffect(vm, showCompressionHistory) {
-        if (nodeId == null && !showCompressionHistory && !vm.chatListInitialized && chatListState.layoutInfo.totalItemsCount > 0) {
+    LaunchedEffect(vm, effectiveShowCompressionHistory) {
+        if (nodeId == null && !effectiveShowCompressionHistory && !vm.chatListInitialized && chatListState.layoutInfo.totalItemsCount > 0) {
             chatListState.scrollToItem(chatListState.layoutInfo.totalItemsCount)
             vm.chatListInitialized = true
         }
     }
 
-    LaunchedEffect(showCompressionHistory, nodeId, conversation.messageNodes.size, conversation.replacementHistory.size) {
-        if (showCompressionHistory && !vm.chatListInitialized && chatListState.layoutInfo.totalItemsCount > 0) {
+    LaunchedEffect(effectiveShowCompressionHistory, nodeId, conversation.messageNodes.size, conversation.replacementHistory.size) {
+        if (effectiveShowCompressionHistory && !vm.chatListInitialized && chatListState.layoutInfo.totalItemsCount > 0) {
             chatListState.scrollToItem(0)
             vm.chatListInitialized = true
         } else if (nodeId != null && conversation.messageNodes.isNotEmpty() && !vm.chatListInitialized) {
@@ -199,7 +201,7 @@ fun ChatPage(
                     errors = errors,
                     onDismissError = { vm.dismissError(it) },
                     onClearAllErrors = { vm.clearAllErrors() },
-                    showCompressionHistory = showCompressionHistory,
+                    showCompressionHistory = effectiveShowCompressionHistory,
                 )
             }
         }
@@ -231,7 +233,7 @@ fun ChatPage(
                     errors = errors,
                     onDismissError = { vm.dismissError(it) },
                     onClearAllErrors = { vm.clearAllErrors() },
-                    showCompressionHistory = showCompressionHistory,
+                    showCompressionHistory = effectiveShowCompressionHistory,
                 )
             }
             BackHandler(drawerState.isOpen) {

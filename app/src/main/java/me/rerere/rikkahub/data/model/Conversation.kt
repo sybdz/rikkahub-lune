@@ -84,6 +84,10 @@ data class Conversation(
         return messageNodes.firstOrNull { node -> node.messages.any { it.id == messageId } }
     }
 
+    fun referencesReplacementHistoryNode(nodeId: Uuid?): Boolean {
+        return nodeId != null && replacementHistory.any { checkpoint -> checkpoint.id == nodeId }
+    }
+
     fun updateCurrentMessages(messages: List<UIMessage>): Conversation {
         return updateCurrentMessages(startIndex = 0, messages = messages)
     }
