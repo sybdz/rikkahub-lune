@@ -4,6 +4,7 @@ import android.content.Context
 import android.util.Log
 import java.io.BufferedInputStream
 import java.io.InputStream
+import java.security.MessageDigest
 import java.util.Base64
 import java.util.UUID
 import java.util.zip.ZipInputStream
@@ -19,11 +20,17 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
+import kotlinx.serialization.decodeFromString
+import kotlinx.serialization.Serializable
+import kotlinx.serialization.encodeToString
+import kotlinx.serialization.json.Json
 import me.rerere.rikkahub.AppScope
 import me.rerere.rikkahub.data.ai.tools.termux.TermuxCommandManager
 import me.rerere.rikkahub.data.ai.tools.termux.TermuxRunCommandRequest
 import me.rerere.rikkahub.data.ai.tools.termux.isSuccessful
 import me.rerere.rikkahub.data.datastore.SettingsStore
+import org.snakeyaml.engine.v2.api.Load
+import org.snakeyaml.engine.v2.api.LoadSettings
 
 private const val TAG = "SkillsRepository"
 private const val TERMUX_BASH_PATH = "/data/data/com.termux/files/usr/bin/bash"
@@ -34,14 +41,39 @@ private const val SKILL_CHUNK_WRITE_BYTES = 48 * 1024
 private const val DEFAULT_IMPORTED_SKILL_DIRECTORY = "skill-import"
 private const val DEFAULT_CREATED_SKILL_DIRECTORY = "new-skill"
 private const val SKILL_PACKAGE_FILE_NAME = "SKILL.md"
+private const val SKILL_SOURCE_METADATA_FILE_NAME = ".rikkahub-skill-source.json"
 private const val BUNDLED_SKILLS_ASSET_ROOT = "builtin_skills"
 private const val SKILL_LIST_PREVIEW_BYTES_LIMIT = 8 * 1024
+private const val SKILL_ARCHIVE_MAX_FILES = 256
+private const val SKILL_ARCHIVE_MAX_TOTAL_BYTES = 4 * 1024 * 1024
+private const val SKILL_ARCHIVE_SINGLE_FILE_BYTES_LIMIT = 512 * 1024
+private const val SKILL_ARCHIVE_MAX_DEPTH = 8
+private const val SKILL_RESOURCE_LIST_LIMIT = 128
+private const val SKILL_SOURCE_METADATA_SCHEMA_VERSION = 1
+
+@Serializable
+enum class SkillSourceType {
+    LOCAL,
+    IMPORTED,
+    BUNDLED,
+}
 
 data class SkillCatalogEntry(
     val directoryName: String,
     val path: String,
     val name: String,
     val description: String,
+    val sourceType: SkillSourceType = SkillSourceType.LOCAL,
+    val sourceId: String? = null,
+    val sourceUrl: String? = null,
+    val version: String? = null,
+    val author: String? = null,
+    val license: String? = null,
+    val compatibility: String? = null,
+    val allowedTools: String? = null,
+    val argumentHint: String? = null,
+    val userInvocable: Boolean = true,
+    val modelInvocable: Boolean = true,
     val isBundled: Boolean = false,
 )
 
@@ -56,11 +88,40 @@ data class SkillEditorDocument(
     val name: String,
     val description: String,
     val body: String,
+    val extras: SkillFrontmatterExtras = SkillFrontmatterExtras(),
 )
 
 data class SkillImportResult(
     val directories: List<String>,
     val importedFiles: Int,
+)
+
+data class SkillImportPreviewEntry(
+    val directoryName: String,
+    val name: String,
+    val description: String,
+    val version: String? = null,
+    val author: String? = null,
+    val scriptFiles: Int = 0,
+    val referenceFiles: Int = 0,
+    val assetFiles: Int = 0,
+)
+
+data class SkillImportPreview(
+    val archiveName: String? = null,
+    val directories: List<String>,
+    val totalFiles: Int,
+    val scriptFiles: Int,
+    val referenceFiles: Int,
+    val assetFiles: Int,
+    val hasScripts: Boolean,
+    val entries: List<SkillImportPreviewEntry>,
+)
+
+data class SkillActivationEntry(
+    val entry: SkillCatalogEntry,
+    val markdown: String,
+    val resourceFiles: List<String>,
 )
 
 data class SkillInvalidEntry(
@@ -95,7 +156,31 @@ data class SkillsCatalogState(
 internal data class SkillFrontmatter(
     val name: String,
     val description: String,
-)
+    val extras: SkillFrontmatterExtras = SkillFrontmatterExtras(),
+) {
+    val license: String? = extras.license
+    val compatibility: String? = extras.compatibility
+    val allowedTools: String? = extras.allowedTools
+    val argumentHint: String? = extras.argumentHint
+    val userInvocable: Boolean = extras.userInvocable
+    val modelInvocable: Boolean = !extras.disableModelInvocation
+    val author: String? = extras.metadata["author"]
+    val version: String? = extras.metadata["version"]
+}
+
+data class SkillFrontmatterExtras(
+    val license: String? = null,
+    val compatibility: String? = null,
+    val allowedTools: String? = null,
+    val argumentHint: String? = null,
+    val userInvocable: Boolean = true,
+    val disableModelInvocation: Boolean = false,
+    val metadata: Map<String, String> = emptyMap(),
+) {
+    val modelInvocable: Boolean = !disableModelInvocation
+    val version: String? = metadata["version"]
+    val author: String? = metadata["author"]
+}
 
 internal sealed interface SkillFrontmatterParseResult {
     data class Success(val frontmatter: SkillFrontmatter) : SkillFrontmatterParseResult
@@ -107,6 +192,7 @@ internal data class SkillDirectoryDescriptor(
     val path: String,
     val hasSkillFile: Boolean,
     val skillMarkdownPreview: String? = null,
+    val sourceMetadataPreview: String? = null,
 )
 
 internal data class SkillCatalogDiscoveryResult(
@@ -135,6 +221,11 @@ internal data class SkillImportPlan(
     val files: List<SkillArchiveFile>,
 )
 
+internal data class SkillImportPreviewData(
+    val plan: SkillImportPlan,
+    val preview: SkillImportPreview,
+)
+
 internal data class BundledSkill(
     val directoryName: String,
     val assetPath: String,
@@ -143,6 +234,17 @@ internal data class BundledSkill(
 internal data class SkillMarkdownDocument(
     val frontmatter: SkillFrontmatter,
     val body: String,
+)
+
+@Serializable
+internal data class SkillSourceMetadata(
+    val schemaVersion: Int = SKILL_SOURCE_METADATA_SCHEMA_VERSION,
+    val sourceType: SkillSourceType,
+    val sourceId: String? = null,
+    val sourceUrl: String? = null,
+    val version: String? = null,
+    val hash: String? = null,
+    val installedAt: Long = System.currentTimeMillis(),
 )
 
 class SkillsRepository(
@@ -193,6 +295,7 @@ class SkillsRepository(
         name: String,
         description: String,
         body: String,
+        extras: SkillFrontmatterExtras = SkillFrontmatterExtras(),
     ): SkillCreationResult {
         require(name.isNotBlank()) { "Skill name cannot be empty" }
         require(description.isNotBlank()) { "Skill description cannot be empty" }
@@ -214,6 +317,7 @@ class SkillsRepository(
                 name = name.trim(),
                 description = description.trim(),
                 body = body,
+                extras = extras,
             )
             val script = buildCreateSkillScript(
                 rootPath = rootPath,
@@ -225,6 +329,15 @@ class SkillsRepository(
                 label = "RikkaHub create local skill",
                 stdin = markdown,
                 timeoutMs = SKILL_WRITE_TIMEOUT_MS,
+            )
+            writeSkillSourceMetadata(
+                rootPath = rootPath,
+                workdir = workdir,
+                directoryName = finalDirectoryName,
+                metadata = SkillSourceMetadata(
+                    sourceType = SkillSourceType.LOCAL,
+                    sourceId = finalDirectoryName,
+                ),
             )
 
             SkillCreationResult(
@@ -251,6 +364,7 @@ class SkillsRepository(
                 name = document.frontmatter.name,
                 description = document.frontmatter.description,
                 body = document.body,
+                extras = document.frontmatter.extras,
             )
         }
     }
@@ -261,6 +375,7 @@ class SkillsRepository(
         name: String,
         description: String,
         body: String,
+        extras: SkillFrontmatterExtras = SkillFrontmatterExtras(),
     ): SkillCreationResult {
         require(originalDirectoryName.isNotBlank()) { "Original skill directory cannot be empty" }
         require(name.isNotBlank()) { "Skill name cannot be empty" }
@@ -297,6 +412,7 @@ class SkillsRepository(
                 name = name.trim(),
                 description = description.trim(),
                 body = body,
+                extras = extras,
             )
             runSkillScript(
                 script = buildCreateSkillScript(
@@ -307,6 +423,19 @@ class SkillsRepository(
                 label = "RikkaHub update local skill",
                 stdin = markdown,
                 timeoutMs = SKILL_WRITE_TIMEOUT_MS,
+            )
+            val sourceMetadata = readSkillSourceMetadata(
+                directoryPath = "$rootPath/$finalDirectoryName",
+                workdir = workdir,
+            ) ?: SkillSourceMetadata(
+                sourceType = SkillSourceType.LOCAL,
+                sourceId = finalDirectoryName,
+            )
+            writeSkillSourceMetadata(
+                rootPath = rootPath,
+                workdir = workdir,
+                directoryName = finalDirectoryName,
+                metadata = sourceMetadata.copy(sourceId = sourceMetadata.sourceId ?: finalDirectoryName),
             )
 
             SkillCreationResult(
@@ -324,14 +453,15 @@ class SkillsRepository(
             ensureSkillsRootDirectory(rootPath = rootPath, workdir = workdir)
             val existingDirectoryNames = listSkillDirectories(rootPath, workdir)
                 .mapTo(linkedSetOf()) { it.directoryName }
-            val archive = parseSkillArchive(inputStream)
-            val importPlan = buildSkillImportPlan(
-                archive = archive,
+            val previewData = buildSkillImportPreview(
+                archive = parseSkillArchive(inputStream),
                 suggestedDirectoryName = archiveName
                     ?.substringBeforeLast('.', archiveName)
                     ?.let { sanitizeSkillDirectoryName(it, DEFAULT_IMPORTED_SKILL_DIRECTORY) },
                 existingDirectoryNames = existingDirectoryNames,
+                archiveName = archiveName,
             )
+            val importPlan = previewData.plan
 
             importPlan.directories
                 .sortedWith(compareBy<String> { it.count { char -> char == '/' } }.thenBy { it })
@@ -351,6 +481,17 @@ class SkillsRepository(
                     bytes = file.bytes,
                 )
             }
+            importPlan.topLevelDirectories.forEach { directoryName ->
+                writeSkillSourceMetadata(
+                    rootPath = rootPath,
+                    workdir = workdir,
+                    directoryName = directoryName,
+                    metadata = SkillSourceMetadata(
+                        sourceType = SkillSourceType.IMPORTED,
+                        sourceId = archiveName?.substringBeforeLast('.', archiveName)?.ifBlank { directoryName } ?: directoryName,
+                    ),
+                )
+            }
 
             SkillImportResult(
                 directories = importPlan.topLevelDirectories,
@@ -359,13 +500,40 @@ class SkillsRepository(
         }
     }
 
+    suspend fun previewSkillZip(
+        inputStream: InputStream,
+        archiveName: String? = null,
+    ): SkillImportPreview {
+        return withContext(Dispatchers.IO) {
+            refreshMutex.withLock {
+                val settings = settingsStore.settingsFlow.value
+                require(!settings.init) { "Settings are not ready" }
+                val rootPath = buildSkillsRootPath(settings.termuxWorkdir)
+                val existingDirectoryNames = listSkillDirectories(rootPath, settings.termuxWorkdir)
+                    .mapTo(linkedSetOf()) { it.directoryName }
+                buildSkillImportPreview(
+                    archive = parseSkillArchive(inputStream),
+                    suggestedDirectoryName = archiveName
+                        ?.substringBeforeLast('.', archiveName)
+                        ?.let { sanitizeSkillDirectoryName(it, DEFAULT_IMPORTED_SKILL_DIRECTORY) },
+                    existingDirectoryNames = existingDirectoryNames,
+                    archiveName = archiveName,
+                ).preview
+            }
+        }
+    }
+
     suspend fun deleteSkill(directoryName: String) {
         require(directoryName.isNotBlank()) { "Skill directory cannot be empty" }
-        require(!isBundledSkillDirectoryName(directoryName)) {
-            "Built-in skills cannot be deleted: $directoryName"
-        }
 
         runCatalogMutation { workdir, rootPath ->
+            val metadata = readSkillSourceMetadata(
+                directoryPath = "$rootPath/$directoryName",
+                workdir = workdir,
+            )
+            require(metadata?.sourceType != SkillSourceType.BUNDLED) {
+                "Built-in skills cannot be deleted: $directoryName"
+            }
             runSkillScript(
                 script = buildDeleteSkillScript(
                     rootPath = rootPath,
@@ -375,6 +543,30 @@ class SkillsRepository(
                 label = "RikkaHub delete local skill",
                 timeoutMs = SKILL_WRITE_TIMEOUT_MS,
             )
+        }
+    }
+
+    suspend fun loadSkillActivations(directoryNames: Collection<String>): List<SkillActivationEntry> {
+        if (directoryNames.isEmpty()) return emptyList()
+        return withContext(Dispatchers.IO) {
+            val settings = settingsStore.settingsFlow.value
+            require(!settings.init) { "Settings are not ready" }
+            val entriesByDirectory = state.value.entries.associateBy { it.directoryName }
+            directoryNames.distinct()
+                .mapNotNull { directoryName -> entriesByDirectory[directoryName] }
+                .map { entry ->
+                    SkillActivationEntry(
+                        entry = entry,
+                        markdown = readSkillFile(
+                            directoryPath = entry.path,
+                            workdir = settings.termuxWorkdir,
+                        ),
+                        resourceFiles = listSkillResourceFiles(
+                            directoryPath = entry.path,
+                            workdir = settings.termuxWorkdir,
+                        ),
+                    )
+                }
         }
     }
 
@@ -487,13 +679,16 @@ class SkillsRepository(
             .map { it.trim() }
             .filter { it.isNotBlank() }
             .mapNotNull { line ->
-                val parts = line.split('\t', limit = 4)
+                val parts = line.split('\t', limit = 5)
                 if (parts.size < 3) return@mapNotNull null
                 SkillDirectoryDescriptor(
-                    directoryName = parts[0],
-                    path = parts[1],
+                    directoryName = decodeSkillDiscoveryField(parts[0]),
+                    path = decodeSkillDiscoveryField(parts[1]),
                     hasSkillFile = parts[2] == "1",
                     skillMarkdownPreview = parts.getOrNull(3)
+                        ?.takeIf { it.isNotBlank() }
+                        ?.let(::decodeSkillMarkdownPreview),
+                    sourceMetadataPreview = parts.getOrNull(4)
                         ?.takeIf { it.isNotBlank() }
                         ?.let(::decodeSkillMarkdownPreview),
                 )
@@ -519,8 +714,8 @@ class SkillsRepository(
                 val parts = line.split('\t')
                 if (parts.size < 3) return@mapNotNull null
                 SkillDirectoryDescriptor(
-                    directoryName = parts[0],
-                    path = parts[1],
+                    directoryName = decodeSkillDiscoveryField(parts[0]),
+                    path = decodeSkillDiscoveryField(parts[1]),
                     hasSkillFile = parts[2] == "1",
                 )
             }
@@ -531,13 +726,96 @@ class SkillsRepository(
         directoryPath: String,
         workdir: String,
     ): String {
-        val script = buildReadSkillScript(directoryPath)
-        val result = runSkillScript(
-            script = script,
+        return readDirectoryFile(
+            directoryPath = directoryPath,
+            fileName = SKILL_PACKAGE_FILE_NAME,
             workdir = workdir,
+            optional = false,
             label = "RikkaHub read local skill",
+        )!!
+    }
+
+    private suspend fun readDirectoryFile(
+        directoryPath: String,
+        fileName: String,
+        workdir: String,
+        optional: Boolean,
+        label: String,
+    ): String? {
+        val result = runSkillScript(
+            script = buildReadDirectoryFileScript(
+                directoryPath = directoryPath,
+                fileName = fileName,
+                optional = optional,
+            ),
+            workdir = workdir,
+            label = label,
+        )
+        return result.stdout.takeIf { it.isNotEmpty() }
+    }
+
+    private suspend fun readSkillSourceMetadata(
+        directoryPath: String,
+        workdir: String,
+    ): SkillSourceMetadata? {
+        val raw = readDirectoryFile(
+            directoryPath = directoryPath,
+            fileName = SKILL_SOURCE_METADATA_FILE_NAME,
+            workdir = workdir,
+            optional = true,
+            label = "RikkaHub read skill source metadata",
+        ) ?: return null
+        return parseSkillSourceMetadata(raw)
+    }
+
+    private suspend fun listSkillResourceFiles(
+        directoryPath: String,
+        workdir: String,
+    ): List<String> {
+        val result = runSkillScript(
+            script = buildListSkillResourceFilesScript(directoryPath),
+            workdir = workdir,
+            label = "RikkaHub list skill resources",
         )
         return result.stdout
+            .lineSequence()
+            .map { it.trim() }
+            .filter { it.isNotBlank() }
+            .map(::decodeSkillDiscoveryField)
+            .toList()
+    }
+
+    private suspend fun writeSkillSourceMetadata(
+        rootPath: String,
+        workdir: String,
+        directoryName: String,
+        metadata: SkillSourceMetadata,
+    ) {
+        writeSkillFile(
+            rootPath = rootPath,
+            workdir = workdir,
+            relativePath = "$directoryName/$SKILL_SOURCE_METADATA_FILE_NAME",
+            bytes = skillSourceMetadataJson.encodeToString(metadata).toByteArray(Charsets.UTF_8),
+        )
+    }
+
+    private fun buildBundledSkillSourceMetadata(bundledSkill: BundledSkill): SkillSourceMetadata {
+        val files = readBundledSkillFiles(
+            context = context,
+            assetPath = bundledSkill.assetPath,
+        )
+        val skillMarkdown = files.firstOrNull { it.path == SKILL_PACKAGE_FILE_NAME }
+            ?.bytes
+            ?.toString(Charsets.UTF_8)
+            .orEmpty()
+        val frontmatter = (parseSkillFrontmatter(skillMarkdown) as? SkillFrontmatterParseResult.Success)
+            ?.frontmatter
+        return SkillSourceMetadata(
+            sourceType = SkillSourceType.BUNDLED,
+            sourceId = bundledSkill.directoryName,
+            version = frontmatter?.version,
+            hash = computeSkillPackageHash(files),
+        )
     }
 
     private suspend fun ensureSkillsRootDirectory(
@@ -558,12 +836,41 @@ class SkillsRepository(
     ): Boolean {
         var installedAny = false
         BUNDLED_SKILLS.forEach { bundledSkill ->
-            if (bundledSkill.directoryName in existingDirectoryNames) return@forEach
+            val expectedMetadata = buildBundledSkillSourceMetadata(bundledSkill)
+            if (bundledSkill.directoryName !in existingDirectoryNames) {
+                runCatching {
+                    installBundledSkill(
+                        rootPath = rootPath,
+                        workdir = workdir,
+                        bundledSkill = bundledSkill,
+                        metadata = expectedMetadata,
+                        replaceExisting = false,
+                    )
+                    existingDirectoryNames += bundledSkill.directoryName
+                    installedAny = true
+                }.onFailure { error ->
+                    Log.w(TAG, "Failed to install bundled skill ${bundledSkill.directoryName}", error)
+                }
+                return@forEach
+            }
+
+            val installedMetadata = runCatching {
+                readSkillSourceMetadata(
+                    directoryPath = "$rootPath/${bundledSkill.directoryName}",
+                    workdir = workdir,
+                )
+            }.getOrNull()
+            val shouldRefreshBundledSkill = installedMetadata?.sourceType == SkillSourceType.BUNDLED &&
+                installedMetadata.sourceId == bundledSkill.directoryName &&
+                installedMetadata.hash != expectedMetadata.hash
+            if (!shouldRefreshBundledSkill) return@forEach
             runCatching {
                 installBundledSkill(
                     rootPath = rootPath,
                     workdir = workdir,
                     bundledSkill = bundledSkill,
+                    metadata = expectedMetadata,
+                    replaceExisting = true,
                 )
                 existingDirectoryNames += bundledSkill.directoryName
                 installedAny = true
@@ -578,6 +885,8 @@ class SkillsRepository(
         rootPath: String,
         workdir: String,
         bundledSkill: BundledSkill,
+        metadata: SkillSourceMetadata,
+        replaceExisting: Boolean,
     ) {
         val files = readBundledSkillFiles(
             context = context,
@@ -585,6 +894,17 @@ class SkillsRepository(
         )
         require(files.any { it.path == SKILL_PACKAGE_FILE_NAME }) {
             "Bundled skill ${bundledSkill.directoryName} is missing $SKILL_PACKAGE_FILE_NAME"
+        }
+        if (replaceExisting) {
+            runSkillScript(
+                script = buildDeleteSkillScript(
+                    rootPath = rootPath,
+                    directoryName = bundledSkill.directoryName,
+                ),
+                workdir = workdir,
+                label = "RikkaHub replace bundled skill",
+                timeoutMs = SKILL_WRITE_TIMEOUT_MS,
+            )
         }
         files.sortedBy { it.path }.forEach { assetFile ->
             writeSkillFile(
@@ -594,6 +914,12 @@ class SkillsRepository(
                 bytes = assetFile.bytes,
             )
         }
+        writeSkillSourceMetadata(
+            rootPath = rootPath,
+            workdir = workdir,
+            directoryName = bundledSkill.directoryName,
+            metadata = metadata,
+        )
     }
 
     private suspend fun createSkillDirectory(
@@ -626,47 +952,62 @@ class SkillsRepository(
         }
 
         val tempToken = UUID.randomUUID().toString()
-        runSkillScript(
-            script = buildBeginChunkedFileWriteScript(
-                rootPath = rootPath,
-                relativePath = relativePath,
-                tempToken = tempToken,
-            ),
-            workdir = workdir,
-            label = "RikkaHub begin local skill file upload",
-            timeoutMs = SKILL_WRITE_TIMEOUT_MS,
-        )
+        runCatching {
+            runSkillScript(
+                script = buildBeginChunkedFileWriteScript(
+                    rootPath = rootPath,
+                    relativePath = relativePath,
+                    tempToken = tempToken,
+                ),
+                workdir = workdir,
+                label = "RikkaHub begin local skill file upload",
+                timeoutMs = SKILL_WRITE_TIMEOUT_MS,
+            )
 
-        bytes.asList()
-            .chunked(SKILL_CHUNK_WRITE_BYTES)
-            .forEach { chunk ->
-                val chunkBytes = ByteArray(chunk.size)
-                chunk.forEachIndexed { index, value ->
-                    chunkBytes[index] = value
+            bytes.asList()
+                .chunked(SKILL_CHUNK_WRITE_BYTES)
+                .forEach { chunk ->
+                    val chunkBytes = ByteArray(chunk.size)
+                    chunk.forEachIndexed { index, value ->
+                        chunkBytes[index] = value
+                    }
+                    runSkillScript(
+                        script = buildAppendChunkedFileWriteScript(
+                            rootPath = rootPath,
+                            relativePath = relativePath,
+                            tempToken = tempToken,
+                        ),
+                        workdir = workdir,
+                        label = "RikkaHub append local skill file upload",
+                        stdin = Base64.getEncoder().encodeToString(chunkBytes),
+                        timeoutMs = SKILL_WRITE_TIMEOUT_MS,
+                    )
                 }
+
+            runSkillScript(
+                script = buildCommitChunkedFileWriteScript(
+                    rootPath = rootPath,
+                    relativePath = relativePath,
+                    tempToken = tempToken,
+                ),
+                workdir = workdir,
+                label = "RikkaHub commit local skill file upload",
+                timeoutMs = SKILL_WRITE_TIMEOUT_MS,
+            )
+        }.getOrElse { error ->
+            runCatching {
                 runSkillScript(
-                    script = buildAppendChunkedFileWriteScript(
+                    script = buildCleanupChunkedFileWriteScript(
                         rootPath = rootPath,
-                        relativePath = relativePath,
                         tempToken = tempToken,
                     ),
                     workdir = workdir,
-                    label = "RikkaHub append local skill file upload",
-                    stdin = Base64.getEncoder().encodeToString(chunkBytes),
+                    label = "RikkaHub cleanup local skill file upload",
                     timeoutMs = SKILL_WRITE_TIMEOUT_MS,
                 )
             }
-
-        runSkillScript(
-            script = buildCommitChunkedFileWriteScript(
-                rootPath = rootPath,
-                relativePath = relativePath,
-                tempToken = tempToken,
-            ),
-            workdir = workdir,
-            label = "RikkaHub commit local skill file upload",
-            timeoutMs = SKILL_WRITE_TIMEOUT_MS,
-        )
+            throw error
+        }
     }
 
     private suspend fun runSkillScript(
@@ -699,13 +1040,15 @@ class SkillsRepository(
             if [ ! -d "${'$'}ROOT" ]; then
               exit 0
             fi
-            find "${'$'}ROOT" -mindepth 1 -maxdepth 1 -type d | sort | while IFS= read -r dir; do
+            find "${'$'}ROOT" -mindepth 1 -maxdepth 1 -type d -print0 | sort -z | while IFS= read -r -d '' dir; do
               [ -n "${'$'}dir" ] || continue
               name="${'$'}(basename "${'$'}dir")"
+              encoded_name="${'$'}(printf '%s' "${'$'}name" | base64 | tr -d '\n')"
+              encoded_dir="${'$'}(printf '%s' "${'$'}dir" | base64 | tr -d '\n')"
               if [ -f "${'$'}dir/$SKILL_PACKAGE_FILE_NAME" ]; then
-                printf '%s\t%s\t1\n' "${'$'}name" "${'$'}dir"
+                printf '%s\t%s\t1\n' "${'$'}encoded_name" "${'$'}encoded_dir"
               else
-                printf '%s\t%s\t0\n' "${'$'}name" "${'$'}dir"
+                printf '%s\t%s\t0\n' "${'$'}encoded_name" "${'$'}encoded_dir"
               fi
             done
         """.trimIndent()
@@ -718,27 +1061,67 @@ class SkillsRepository(
             ROOT='$safeRoot'
             PREVIEW_BYTES=$SKILL_LIST_PREVIEW_BYTES_LIMIT
             mkdir -p "${'$'}ROOT"
-            find "${'$'}ROOT" -mindepth 1 -maxdepth 1 -type d | sort | while IFS= read -r dir; do
+            find "${'$'}ROOT" -mindepth 1 -maxdepth 1 -type d -print0 | sort -z | while IFS= read -r -d '' dir; do
               [ -n "${'$'}dir" ] || continue
               name="${'$'}(basename "${'$'}dir")"
+              encoded_name="${'$'}(printf '%s' "${'$'}name" | base64 | tr -d '\n')"
+              encoded_dir="${'$'}(printf '%s' "${'$'}dir" | base64 | tr -d '\n')"
               skill_file="${'$'}dir/$SKILL_PACKAGE_FILE_NAME"
+              source_file="${'$'}dir/$SKILL_SOURCE_METADATA_FILE_NAME"
               if [ -f "${'$'}skill_file" ]; then
-                printf '%s\t%s\t1\t' "${'$'}name" "${'$'}dir"
+                printf '%s\t%s\t1\t' "${'$'}encoded_name" "${'$'}encoded_dir"
                 head -c "${'$'}PREVIEW_BYTES" "${'$'}skill_file" | base64 | tr -d '\n'
+                printf '\t'
+                if [ -f "${'$'}source_file" ]; then
+                  head -c "${'$'}PREVIEW_BYTES" "${'$'}source_file" | base64 | tr -d '\n'
+                fi
                 printf '\n'
               else
-                printf '%s\t%s\t0\t\n' "${'$'}name" "${'$'}dir"
+                printf '%s\t%s\t0\t\t\n' "${'$'}encoded_name" "${'$'}encoded_dir"
               fi
             done
         """.trimIndent()
     }
 
-    private fun buildReadSkillScript(directoryPath: String): String {
+    private fun buildReadDirectoryFileScript(
+        directoryPath: String,
+        fileName: String,
+        optional: Boolean,
+    ): String {
+        val safeDirectory = directoryPath.escapeForSingleQuotedShell()
+        val safeFileName = fileName.escapeForSingleQuotedShell()
+        return """
+            set -eu
+            DIR='$safeDirectory'
+            FILE='$safeFileName'
+            TARGET="${'$'}DIR/${'$'}FILE"
+            if [ ! -f "${'$'}TARGET" ]; then
+              if ${if (optional) "true" else "false"}; then
+                exit 0
+              fi
+              exit 1
+            fi
+            cat "${'$'}TARGET"
+        """.trimIndent()
+    }
+
+    private fun buildListSkillResourceFilesScript(directoryPath: String): String {
         val safeDirectory = directoryPath.escapeForSingleQuotedShell()
         return """
             set -eu
             DIR='$safeDirectory'
-            cat "${'$'}DIR/$SKILL_PACKAGE_FILE_NAME"
+            if [ ! -d "${'$'}DIR" ]; then
+              exit 0
+            fi
+            count=0
+            find "${'$'}DIR" -type f -print0 | sort -z | while IFS= read -r -d '' file; do
+              rel="${'$'}{file#"${'$'}DIR"/}"
+              [ "${'$'}rel" = "$SKILL_PACKAGE_FILE_NAME" ] && continue
+              [ "${'$'}rel" = "$SKILL_SOURCE_METADATA_FILE_NAME" ] && continue
+              printf '%s\n' "${'$'}(printf '%s' "${'$'}rel" | base64 | tr -d '\n')"
+              count="${'$'}((count + 1))"
+              [ "${'$'}count" -lt "$SKILL_RESOURCE_LIST_LIMIT" ] || break
+            done
         """.trimIndent()
     }
 
@@ -890,6 +1273,20 @@ class SkillsRepository(
         """.trimIndent()
     }
 
+    private fun buildCleanupChunkedFileWriteScript(
+        rootPath: String,
+        tempToken: String,
+    ): String {
+        val safeRoot = rootPath.escapeForSingleQuotedShell()
+        val safeTempToken = tempToken.escapeForSingleQuotedShell()
+        return """
+            set -eu
+            ROOT='$safeRoot'
+            TEMP_TOKEN='$safeTempToken'
+            rm -f "${'$'}ROOT/.rikkahub_tmp/${'$'}TEMP_TOKEN"
+        """.trimIndent()
+    }
+
     companion object {
         fun buildSkillsRootPath(workdir: String): String {
             val normalized = workdir.trimEnd('/').ifBlank { "/data/data/com.termux/files/home" }
@@ -902,6 +1299,21 @@ private fun decodeSkillMarkdownPreview(encodedPreview: String): String {
     return String(Base64.getDecoder().decode(encodedPreview), Charsets.UTF_8)
 }
 
+private fun decodeSkillDiscoveryField(encodedValue: String): String {
+    return String(Base64.getDecoder().decode(encodedValue), Charsets.UTF_8)
+}
+
+private val skillSourceMetadataJson = Json {
+    ignoreUnknownKeys = true
+    encodeDefaults = false
+}
+
+private val skillFrontmatterLoader = Load(
+    LoadSettings.builder()
+        .setLabel(SKILL_PACKAGE_FILE_NAME)
+        .build()
+)
+
 private val BUNDLED_SKILLS = listOf(
     BundledSkill(
         directoryName = "skill-creator",
@@ -909,62 +1321,44 @@ private val BUNDLED_SKILLS = listOf(
     )
 )
 
-private val BUNDLED_SKILL_DIRECTORY_NAMES = BUNDLED_SKILLS
-    .mapTo(linkedSetOf()) { it.directoryName }
-
-internal fun isBundledSkillDirectoryName(directoryName: String): Boolean {
-    return directoryName in BUNDLED_SKILL_DIRECTORY_NAMES
-}
-
 internal fun parseSkillFrontmatter(markdown: String): SkillFrontmatterParseResult {
-    val normalized = markdown.trimStart()
-    if (!normalized.startsWith("---")) {
-        return SkillFrontmatterParseResult.Error(SkillInvalidReason.MissingYamlFrontmatter)
+    val section = extractSkillFrontmatterSection(markdown)
+    if (section is SkillFrontmatterSectionResult.Error) {
+        return SkillFrontmatterParseResult.Error(section.reason)
     }
+    section as SkillFrontmatterSectionResult.Success
 
-    val lines = normalized.lineSequence().toList()
-    if (lines.isEmpty() || lines.first().trim() != "---") {
-        return SkillFrontmatterParseResult.Error(SkillInvalidReason.FrontmatterMustStart)
+    val rawValues = runCatching {
+        skillFrontmatterLoader.loadFromString(section.yaml)
+    }.getOrElse { error ->
+        return SkillFrontmatterParseResult.Error(
+            SkillInvalidReason.Other(error.message ?: "Failed to parse YAML frontmatter")
+        )
     }
+    val values = rawValues as? Map<*, *> ?: emptyMap<Any?, Any?>()
 
-    val endIndex = lines.indexOfFirst { indexLine ->
-        indexLine.trim() == "---"
-    }.let { firstEnd ->
-        if (firstEnd <= 0) {
-            lines.drop(1).indexOfFirst { it.trim() == "---" }.let { relative ->
-                if (relative >= 0) relative + 1 else -1
-            }
-        } else {
-            firstEnd
-        }
-    }
-
-    if (endIndex <= 0) {
-        return SkillFrontmatterParseResult.Error(SkillInvalidReason.FrontmatterNotClosed)
-    }
-
-    val values = linkedMapOf<String, String>()
-    lines.subList(1, endIndex).forEach { rawLine ->
-        val line = rawLine.trim()
-        if (line.isBlank() || line.startsWith("#")) return@forEach
-        val separator = line.indexOf(':')
-        if (separator <= 0) return@forEach
-        val key = line.substring(0, separator).trim()
-        val value = line.substring(separator + 1).trim().trimMatchingQuotes()
-        if (key.isNotBlank()) {
-            values[key] = value
-        }
-    }
-
-    val name = values["name"]?.takeIf { it.isNotBlank() }
+    val name = values.stringValue("name")
         ?: return SkillFrontmatterParseResult.Error(SkillInvalidReason.MissingName)
-    val description = values["description"]?.takeIf { it.isNotBlank() }
+    val description = values.stringValue("description")
         ?: return SkillFrontmatterParseResult.Error(SkillInvalidReason.MissingDescription)
+    val metadata = values.stringMap("metadata").toMutableMap().apply {
+        values.stringValue("author")?.let { putIfAbsent("author", it) }
+        values.stringValue("version")?.let { putIfAbsent("version", it) }
+    }
 
     return SkillFrontmatterParseResult.Success(
         SkillFrontmatter(
             name = name,
             description = description,
+            extras = SkillFrontmatterExtras(
+                license = values.stringLikeValue("license"),
+                compatibility = values.stringLikeValue("compatibility"),
+                allowedTools = values.stringLikeValue("allowed-tools"),
+                argumentHint = values.stringLikeValue("argument-hint"),
+                userInvocable = values.booleanValue("user-invocable") ?: true,
+                disableModelInvocation = values.booleanValue("disable-model-invocation") ?: false,
+                metadata = metadata,
+            ),
         )
     )
 }
@@ -984,17 +1378,6 @@ internal fun sanitizeSkillDirectoryName(
 
 private fun String.escapeForSingleQuotedShell(): String = replace("'", "'\"'\"'")
 
-private fun String.trimMatchingQuotes(): String {
-    if (length >= 2 && first() == last()) {
-        return when (first()) {
-            '"' -> substring(1, lastIndex).unescapeDoubleQuotedYaml()
-            '\'' -> substring(1, lastIndex).replace("''", "'")
-            else -> this
-        }
-    }
-    return this
-}
-
 private fun String.escapeForDoubleQuotedYaml(): String {
     return buildString(length + 8) {
         for (char in this@escapeForDoubleQuotedYaml) {
@@ -1008,29 +1391,6 @@ private fun String.escapeForDoubleQuotedYaml(): String {
             }
         }
     }
-}
-
-private fun String.unescapeDoubleQuotedYaml(): String {
-    val result = StringBuilder(length)
-    var index = 0
-    while (index < length) {
-        val current = this[index]
-        if (current == '\\' && index + 1 < length) {
-            when (val next = this[index + 1]) {
-                '\\' -> result.append('\\')
-                '"' -> result.append('"')
-                'n' -> result.append('\n')
-                'r' -> result.append('\r')
-                't' -> result.append('\t')
-                else -> result.append(next)
-            }
-            index += 2
-        } else {
-            result.append(current)
-            index += 1
-        }
-    }
-    return result.toString()
 }
 
 internal fun SkillsCatalogState.toRefreshingCatalogState(
@@ -1112,19 +1472,44 @@ internal suspend fun inspectSkillDirectory(
         )
     }
 
-    val markdown = directory.skillMarkdownPreview ?: runCatching {
-        readSkillFile(directory.path)
-    }.getOrElse { error ->
-        return SkillDirectoryInspectionResult.Invalid(
-            SkillInvalidEntry(
-                directoryName = directory.directoryName,
-                path = directory.path,
-                reason = buildSkillReadFailureReason(error),
-            )
-        )
+    val sourceMetadata = directory.sourceMetadataPreview
+        ?.let(::parseSkillSourceMetadata)
+    val previewResult = directory.skillMarkdownPreview?.let(::parseSkillFrontmatter)
+    val parsed = when {
+        previewResult is SkillFrontmatterParseResult.Success -> previewResult
+        previewResult is SkillFrontmatterParseResult.Error &&
+            shouldRetrySkillPreviewRead(previewResult.reason) -> {
+            runCatching {
+                parseSkillFrontmatter(readSkillFile(directory.path))
+            }.getOrElse { error ->
+                return SkillDirectoryInspectionResult.Invalid(
+                    SkillInvalidEntry(
+                        directoryName = directory.directoryName,
+                        path = directory.path,
+                        reason = buildSkillReadFailureReason(error),
+                    )
+                )
+            }
+        }
+
+        previewResult != null -> previewResult
+
+        else -> {
+            runCatching {
+                parseSkillFrontmatter(readSkillFile(directory.path))
+            }.getOrElse { error ->
+                return SkillDirectoryInspectionResult.Invalid(
+                    SkillInvalidEntry(
+                        directoryName = directory.directoryName,
+                        path = directory.path,
+                        reason = buildSkillReadFailureReason(error),
+                    )
+                )
+            }
+        }
     }
 
-    return when (val parsed = parseSkillFrontmatter(markdown)) {
+    return when (parsed) {
         is SkillFrontmatterParseResult.Success -> {
             SkillDirectoryInspectionResult.Valid(
                 SkillCatalogEntry(
@@ -1132,7 +1517,18 @@ internal suspend fun inspectSkillDirectory(
                     path = directory.path,
                     name = parsed.frontmatter.name,
                     description = parsed.frontmatter.description,
-                    isBundled = isBundledSkillDirectoryName(directory.directoryName),
+                    sourceType = sourceMetadata?.sourceType ?: SkillSourceType.LOCAL,
+                    sourceId = sourceMetadata?.sourceId,
+                    sourceUrl = sourceMetadata?.sourceUrl,
+                    version = sourceMetadata?.version ?: parsed.frontmatter.version,
+                    author = parsed.frontmatter.author,
+                    license = parsed.frontmatter.license,
+                    compatibility = parsed.frontmatter.compatibility,
+                    allowedTools = parsed.frontmatter.allowedTools,
+                    argumentHint = parsed.frontmatter.argumentHint,
+                    userInvocable = parsed.frontmatter.userInvocable,
+                    modelInvocable = parsed.frontmatter.modelInvocable,
+                    isBundled = sourceMetadata?.sourceType == SkillSourceType.BUNDLED,
                 )
             )
         }
@@ -1156,16 +1552,17 @@ internal fun buildSkillReadFailureReason(error: Throwable): SkillInvalidReason {
 
 internal fun parseSkillMarkdownDocument(markdown: String): SkillMarkdownDocument {
     val normalized = markdown.trimStart()
+    val section = extractSkillFrontmatterSection(normalized)
+    if (section is SkillFrontmatterSectionResult.Error) {
+        error(localizedSkillParseError(section.reason))
+    }
+    section as SkillFrontmatterSectionResult.Success
     val parsedFrontmatter = parseSkillFrontmatter(normalized)
     val frontmatter = when (parsedFrontmatter) {
         is SkillFrontmatterParseResult.Success -> parsedFrontmatter.frontmatter
         is SkillFrontmatterParseResult.Error -> error(localizedSkillParseError(parsedFrontmatter.reason))
     }
-
-    val lines = normalized.lineSequence().toList()
-    val endIndex = lines.drop(1).indexOfFirst { it.trim() == "---" }
-    require(endIndex >= 0) { "SKILL.md frontmatter is not closed" }
-    val body = lines.drop(endIndex + 2).joinToString("\n").trim()
+    val body = section.body.trim()
 
     return SkillMarkdownDocument(
         frontmatter = frontmatter,
@@ -1177,6 +1574,7 @@ internal fun buildSkillMarkdown(
     name: String,
     description: String,
     body: String,
+    extras: SkillFrontmatterExtras = SkillFrontmatterExtras(),
 ): String {
     val resolvedBody = body.trim().ifBlank {
         """
@@ -1189,6 +1587,30 @@ internal fun buildSkillMarkdown(
         appendLine("---")
         appendLine("name: \"${name.escapeForDoubleQuotedYaml()}\"")
         appendLine("description: \"${description.escapeForDoubleQuotedYaml()}\"")
+        extras.license?.takeIf { it.isNotBlank() }?.let {
+            appendLine("license: \"${it.escapeForDoubleQuotedYaml()}\"")
+        }
+        extras.compatibility?.takeIf { it.isNotBlank() }?.let {
+            appendLine("compatibility: \"${it.escapeForDoubleQuotedYaml()}\"")
+        }
+        extras.allowedTools?.takeIf { it.isNotBlank() }?.let {
+            appendLine("allowed-tools: \"${it.escapeForDoubleQuotedYaml()}\"")
+        }
+        extras.argumentHint?.takeIf { it.isNotBlank() }?.let {
+            appendLine("argument-hint: \"${it.escapeForDoubleQuotedYaml()}\"")
+        }
+        if (!extras.userInvocable) {
+            appendLine("user-invocable: false")
+        }
+        if (extras.disableModelInvocation) {
+            appendLine("disable-model-invocation: true")
+        }
+        if (extras.metadata.isNotEmpty()) {
+            appendLine("metadata:")
+            extras.metadata.toSortedMap().forEach { (key, value) ->
+                appendLine("  $key: \"${value.escapeForDoubleQuotedYaml()}\"")
+            }
+        }
         appendLine("---")
         appendLine()
         appendLine(resolvedBody)
@@ -1212,6 +1634,8 @@ private fun localizedSkillParseError(reason: SkillInvalidReason): String {
 internal fun parseSkillArchive(inputStream: InputStream): ParsedSkillArchive {
     val directories = linkedSetOf<String>()
     val files = arrayListOf<SkillArchiveFile>()
+    var totalBytes = 0
+    var fileCount = 0
 
     ZipInputStream(BufferedInputStream(inputStream)).use { zipInputStream ->
         while (true) {
@@ -1226,7 +1650,18 @@ internal fun parseSkillArchive(inputStream: InputStream): ParsedSkillArchive {
             if (entry.isDirectory) {
                 directories += normalizedPath
             } else {
+                fileCount += 1
+                require(fileCount <= SKILL_ARCHIVE_MAX_FILES) {
+                    "Zip archive contains too many files"
+                }
                 val bytes = zipInputStream.readBytes()
+                require(bytes.size <= SKILL_ARCHIVE_SINGLE_FILE_BYTES_LIMIT) {
+                    "Zip entry is too large: $normalizedPath"
+                }
+                totalBytes += bytes.size
+                require(totalBytes <= SKILL_ARCHIVE_MAX_TOTAL_BYTES) {
+                    "Zip archive is too large"
+                }
                 files += SkillArchiveFile(
                     path = normalizedPath,
                     bytes = bytes,
@@ -1318,6 +1753,53 @@ internal fun buildSkillImportPlan(
     )
 }
 
+internal fun buildSkillImportPreview(
+    archive: ParsedSkillArchive,
+    suggestedDirectoryName: String?,
+    existingDirectoryNames: Set<String> = emptySet(),
+    archiveName: String? = null,
+): SkillImportPreviewData {
+    val plan = buildSkillImportPlan(
+        archive = archive,
+        suggestedDirectoryName = suggestedDirectoryName,
+        existingDirectoryNames = existingDirectoryNames,
+    )
+    val entries = plan.topLevelDirectories.map { directoryName ->
+        val skillFilePath = "$directoryName/$SKILL_PACKAGE_FILE_NAME"
+        val skillFile = plan.files.firstOrNull { it.path == skillFilePath }
+            ?: error("Zip package must contain $SKILL_PACKAGE_FILE_NAME at the root of a skill directory")
+        val frontmatter = when (val parsed = parseSkillFrontmatter(skillFile.bytes.toString(Charsets.UTF_8))) {
+            is SkillFrontmatterParseResult.Success -> parsed.frontmatter
+            is SkillFrontmatterParseResult.Error -> error("Invalid $skillFilePath: ${localizedSkillParseError(parsed.reason)}")
+        }
+        val filesForSkill = plan.files.filter { it.path.startsWith("$directoryName/") }
+        SkillImportPreviewEntry(
+            directoryName = directoryName,
+            name = frontmatter.name,
+            description = frontmatter.description,
+            version = frontmatter.version,
+            author = frontmatter.author,
+            scriptFiles = filesForSkill.count { it.path.startsWith("$directoryName/scripts/") },
+            referenceFiles = filesForSkill.count { it.path.startsWith("$directoryName/references/") },
+            assetFiles = filesForSkill.count { it.path.startsWith("$directoryName/assets/") },
+        )
+    }
+    val preview = SkillImportPreview(
+        archiveName = archiveName,
+        directories = plan.topLevelDirectories,
+        totalFiles = plan.files.size,
+        scriptFiles = entries.sumOf { it.scriptFiles },
+        referenceFiles = entries.sumOf { it.referenceFiles },
+        assetFiles = entries.sumOf { it.assetFiles },
+        hasScripts = entries.any { it.scriptFiles > 0 },
+        entries = entries,
+    )
+    return SkillImportPreviewData(
+        plan = plan,
+        preview = preview,
+    )
+}
+
 internal fun resolveUniqueDirectoryNames(
     desired: List<String>,
     existing: Set<String>,
@@ -1374,10 +1856,16 @@ internal fun normalizeSkillArchiveEntryPath(path: String): String? {
 
     val segments = trimmed.split('/')
     if (segments.any { segment ->
-            segment.isBlank() || segment == "." || segment == ".." || '\u0000' in segment
+            segment.isBlank() ||
+                segment == "." ||
+                segment == ".." ||
+                segment.any { char -> char.code < 0x20 || char == '\u007f' }
         }
     ) {
         error("Zip entry contains an invalid path: $path")
+    }
+    require(segments.size <= SKILL_ARCHIVE_MAX_DEPTH) {
+        "Zip entry is nested too deeply: $path"
     }
     return segments.joinToString("/")
 }
@@ -1474,4 +1962,114 @@ internal fun readBundledSkillFiles(
 
     walk(assetPath)
     return result.sortedBy { it.path }
+}
+
+private sealed interface SkillFrontmatterSectionResult {
+    data class Success(
+        val yaml: String,
+        val body: String,
+    ) : SkillFrontmatterSectionResult
+
+    data class Error(val reason: SkillInvalidReason) : SkillFrontmatterSectionResult
+}
+
+private fun extractSkillFrontmatterSection(markdown: String): SkillFrontmatterSectionResult {
+    val normalized = markdown.trimStart()
+    if (!normalized.startsWith("---")) {
+        return SkillFrontmatterSectionResult.Error(SkillInvalidReason.MissingYamlFrontmatter)
+    }
+
+    val lines = normalized.lineSequence().toList()
+    if (lines.isEmpty() || lines.first().trim() != "---") {
+        return SkillFrontmatterSectionResult.Error(SkillInvalidReason.FrontmatterMustStart)
+    }
+
+    val endIndex = lines.drop(1)
+        .indexOfFirst { it.trim() == "---" }
+        .takeIf { it >= 0 }
+        ?.plus(1)
+        ?: return SkillFrontmatterSectionResult.Error(SkillInvalidReason.FrontmatterNotClosed)
+
+    return SkillFrontmatterSectionResult.Success(
+        yaml = lines.subList(1, endIndex).joinToString("\n"),
+        body = lines.drop(endIndex + 1).joinToString("\n"),
+    )
+}
+
+private fun Map<*, *>.stringValue(key: String): String? {
+    return (this[key] as? String)
+        ?.trim()
+        ?.takeIf { it.isNotBlank() }
+}
+
+private fun Map<*, *>.stringLikeValue(key: String): String? {
+    val value = this[key] ?: return null
+    return value.toPromptString()
+        ?.trim()
+        ?.takeIf { it.isNotBlank() }
+}
+
+private fun Map<*, *>.booleanValue(key: String): Boolean? {
+    val value = this[key] ?: return null
+    return when (value) {
+        is Boolean -> value
+        is String -> value.trim().lowercase().let {
+            when (it) {
+                "true" -> true
+                "false" -> false
+                else -> null
+            }
+        }
+
+        else -> null
+    }
+}
+
+private fun Map<*, *>.stringMap(key: String): Map<String, String> {
+    val value = this[key] as? Map<*, *> ?: return emptyMap()
+    return value.entries.mapNotNull { (entryKey, entryValue) ->
+        val normalizedKey = (entryKey as? String)?.trim()?.takeIf { it.isNotBlank() } ?: return@mapNotNull null
+        val normalizedValue = entryValue?.toPromptString()?.trim()?.takeIf { it.isNotBlank() } ?: return@mapNotNull null
+        normalizedKey to normalizedValue
+    }.toMap()
+}
+
+private fun Any.toPromptString(): String? {
+    return when (this) {
+        is String -> this
+        is Number, is Boolean -> toString()
+        is Collection<*> -> joinToString(", ") { it?.toPromptString().orEmpty() }
+            .takeIf { it.isNotBlank() }
+
+        is Map<*, *> -> entries.joinToString(", ") { (key, value) ->
+            "${key?.toString().orEmpty()}=${value?.toPromptString().orEmpty()}"
+        }.takeIf { it.isNotBlank() }
+
+        else -> toString()
+    }
+}
+
+private fun parseSkillSourceMetadata(raw: String): SkillSourceMetadata? {
+    return runCatching {
+        skillSourceMetadataJson.decodeFromString<SkillSourceMetadata>(raw)
+    }.getOrNull()
+}
+
+private fun computeSkillPackageHash(files: List<SkillArchiveFile>): String {
+    val digest = MessageDigest.getInstance("SHA-256")
+    files.sortedBy { it.path }.forEach { file ->
+        digest.update(file.path.toByteArray(Charsets.UTF_8))
+        digest.update(0)
+        digest.update(file.bytes)
+        digest.update(0)
+    }
+    return digest.digest().joinToString(separator = "") { byte ->
+        "%02x".format(byte)
+    }
+}
+
+private fun shouldRetrySkillPreviewRead(reason: SkillInvalidReason): Boolean {
+    return reason == SkillInvalidReason.FrontmatterNotClosed ||
+        reason == SkillInvalidReason.MissingName ||
+        reason == SkillInvalidReason.MissingDescription
 }

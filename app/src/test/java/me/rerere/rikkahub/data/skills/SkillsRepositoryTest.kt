@@ -4,6 +4,7 @@ import java.io.ByteArrayInputStream
 import java.io.ByteArrayOutputStream
 import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -148,6 +149,13 @@ class SkillsRepositoryTest {
                         description = "Built in",
                         body = "",
                     ),
+                    sourceMetadataPreview = """
+                        {
+                          "sourceType": "BUNDLED",
+                          "sourceId": "skill-creator",
+                          "hash": "abc"
+                        }
+                    """.trimIndent(),
                 )
             ),
             readSkillFile = { error("Should not read full skill file when preview is available") },
@@ -157,6 +165,34 @@ class SkillsRepositoryTest {
         assertEquals("skill-creator", result.entries.single().directoryName)
         assertEquals("Skill Creator", result.entries.single().name)
         assertTrue(result.entries.single().isBundled)
+        assertTrue(result.invalidEntries.isEmpty())
+    }
+
+    @Test
+    fun `discoverCatalogEntries should retry full skill read when preview is truncated`() = runBlocking {
+        val result = discoverCatalogEntries(
+            directories = listOf(
+                SkillDirectoryDescriptor(
+                    directoryName = "demo",
+                    path = "/skills/demo",
+                    hasSkillFile = true,
+                    skillMarkdownPreview = """
+                        ---
+                        name: demo
+                    """.trimIndent(),
+                )
+            ),
+            readSkillFile = {
+                buildSkillMarkdown(
+                    name = "Demo",
+                    description = "Recovered from full read",
+                    body = "",
+                )
+            },
+        )
+
+        assertEquals(1, result.entries.size)
+        assertEquals("Demo", result.entries.single().name)
         assertTrue(result.invalidEntries.isEmpty())
     }
 
@@ -204,6 +240,37 @@ class SkillsRepositoryTest {
     }
 
     @Test
+    fun `buildSkillMarkdown should preserve supported optional frontmatter fields`() {
+        val markdown = buildSkillMarkdown(
+            name = "Skill Creator",
+            description = "Create and optimize skills",
+            body = "",
+            extras = SkillFrontmatterExtras(
+                license = "Apache-2.0",
+                compatibility = "termux",
+                allowedTools = "Bash Read",
+                argumentHint = "<path-to-skill>",
+                userInvocable = false,
+                disableModelInvocation = true,
+                metadata = mapOf(
+                    "author" to "anthropic",
+                    "version" to "1.2.3",
+                ),
+            ),
+        )
+
+        val parsed = parseSkillFrontmatter(markdown) as SkillFrontmatterParseResult.Success
+        assertEquals("Apache-2.0", parsed.frontmatter.license)
+        assertEquals("termux", parsed.frontmatter.compatibility)
+        assertEquals("Bash Read", parsed.frontmatter.allowedTools)
+        assertEquals("<path-to-skill>", parsed.frontmatter.argumentHint)
+        assertFalse(parsed.frontmatter.userInvocable)
+        assertFalse(parsed.frontmatter.modelInvocable)
+        assertEquals("anthropic", parsed.frontmatter.author)
+        assertEquals("1.2.3", parsed.frontmatter.version)
+    }
+
+    @Test
     fun `parseSkillMarkdownDocument should return body without frontmatter`() {
         val markdown = buildSkillMarkdown(
             name = "Demo",
@@ -222,6 +289,15 @@ class SkillsRepositoryTest {
     fun `normalizeSkillArchiveEntryPath should reject traversal`() {
         val result = runCatching {
             normalizeSkillArchiveEntryPath("../danger.sh")
+        }
+
+        assertTrue(result.isFailure)
+    }
+
+    @Test
+    fun `normalizeSkillArchiveEntryPath should reject control characters`() {
+        val result = runCatching {
+            normalizeSkillArchiveEntryPath("demo/\tbad.txt")
         }
 
         assertTrue(result.isFailure)
@@ -284,6 +360,53 @@ class SkillsRepositoryTest {
     }
 
     @Test
+    fun `buildSkillImportPreview should summarize imported skills and scripts`() {
+        val archive = ParsedSkillArchive(
+            directories = linkedSetOf("scripts", "assets"),
+            files = listOf(
+                SkillArchiveFile(
+                    path = "SKILL.md",
+                    bytes = buildSkillMarkdown(
+                        name = "Demo Skill",
+                        description = "Imported",
+                        body = "",
+                        extras = SkillFrontmatterExtras(
+                            metadata = mapOf(
+                                "author" to "tester",
+                                "version" to "2.0.0",
+                            )
+                        ),
+                    ).toByteArray()
+                ),
+                SkillArchiveFile(
+                    path = "scripts/run.sh",
+                    bytes = "echo ok".toByteArray(),
+                ),
+                SkillArchiveFile(
+                    path = "assets/template.txt",
+                    bytes = "template".toByteArray(),
+                ),
+            ),
+        )
+
+        val preview = buildSkillImportPreview(
+            archive = archive,
+            suggestedDirectoryName = "demo-skill",
+            existingDirectoryNames = setOf("demo-skill"),
+            archiveName = "demo.zip",
+        ).preview
+
+        assertEquals(listOf("demo-skill-2"), preview.directories)
+        assertEquals(3, preview.totalFiles)
+        assertEquals(1, preview.scriptFiles)
+        assertEquals(1, preview.assetFiles)
+        assertTrue(preview.hasScripts)
+        assertEquals("Demo Skill", preview.entries.single().name)
+        assertEquals("tester", preview.entries.single().author)
+        assertEquals("2.0.0", preview.entries.single().version)
+    }
+
+    @Test
     fun `parseSkillArchive should ignore metadata files and flatten outer directory`() {
         val output = ByteArrayOutputStream()
         java.util.zip.ZipOutputStream(output).use { zip ->
@@ -302,5 +425,24 @@ class SkillsRepositoryTest {
 
         assertEquals(listOf("demo/SKILL.md"), parsed.files.map { it.path })
         assertEquals(setOf("demo"), parsed.directories)
+    }
+
+    @Test
+    fun `parseSkillArchive should reject oversized files`() {
+        val output = ByteArrayOutputStream()
+        java.util.zip.ZipOutputStream(output).use { zip ->
+            zip.putNextEntry(java.util.zip.ZipEntry("demo/SKILL.md"))
+            zip.write(buildSkillMarkdown("Demo", "Imported", "").toByteArray())
+            zip.closeEntry()
+            zip.putNextEntry(java.util.zip.ZipEntry("demo/references/huge.txt"))
+            zip.write(ByteArray(600 * 1024))
+            zip.closeEntry()
+        }
+
+        val result = runCatching {
+            parseSkillArchive(ByteArrayInputStream(output.toByteArray()))
+        }
+
+        assertTrue(result.isFailure)
     }
 }

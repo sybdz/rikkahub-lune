@@ -227,6 +227,7 @@ dependencies {
 
     // serialization
     implementation(libs.kotlinx.serialization.json)
+    implementation(libs.snakeyaml.engine)
 
     // zxing
     implementation(libs.zxing.core)

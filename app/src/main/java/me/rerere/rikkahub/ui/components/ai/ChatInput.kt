@@ -131,6 +131,8 @@ import me.rerere.rikkahub.data.files.FilesManager
 import me.rerere.rikkahub.data.model.Assistant
 import me.rerere.rikkahub.data.model.Conversation
 import me.rerere.rikkahub.data.model.QuickMessage
+import me.rerere.rikkahub.data.skills.SkillCatalogEntry
+import me.rerere.rikkahub.data.skills.SkillsRepository
 import me.rerere.rikkahub.ui.components.ui.InjectionSelector
 import me.rerere.rikkahub.ui.components.ui.KeepScreenOn
 import me.rerere.rikkahub.ui.components.ui.permission.PermissionCamera
@@ -445,9 +447,25 @@ private fun TextInputRow(
 ) {
     val settings = LocalSettings.current
     val filesManager: FilesManager = koinInject()
+    val skillsRepository: SkillsRepository = koinInject()
     val assistant = settings.getCurrentAssistant()
+    val skillsState by skillsRepository.state.collectAsState()
     val quickMessages = remember(settings.quickMessages, assistant.quickMessageIds) {
         settings.getQuickMessagesOfAssistant(assistant)
+    }
+    val invocableSkills = remember(
+        assistant.skillsEnabled,
+        assistant.selectedSkills,
+        assistant.localTools,
+        skillsState.entries,
+    ) {
+        if (!assistant.skillsEnabled) {
+            emptyList()
+        } else {
+            skillsState.entries
+                .filter { it.directoryName in assistant.selectedSkills && it.userInvocable }
+                .sortedBy { it.directoryName }
+        }
     }
     Column(
         modifier = Modifier.fillMaxWidth(),
@@ -473,6 +491,15 @@ private fun TextInputRow(
                     )
                 }
             }
+        }
+
+        if (invocableSkills.isNotEmpty() && !termuxCommandModeEnabled) {
+            SkillInvokeRow(
+                skills = invocableSkills,
+                onSkillSelected = { skill ->
+                    state.appendText("/${skill.directoryName} ")
+                }
+            )
         }
 
         var isFocused by remember { mutableStateOf(false) }
@@ -575,6 +602,43 @@ private fun TextInputRow(
 }
 
 @Composable
+private fun SkillInvokeRow(
+    skills: List<SkillCatalogEntry>,
+    onSkillSelected: (SkillCatalogEntry) -> Unit,
+) {
+    FlowRow(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        verticalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        skills.forEach { skill ->
+            Surface(
+                onClick = { onSkillSelected(skill) },
+                shape = RoundedCornerShape(12.dp),
+                color = MaterialTheme.colorScheme.surfaceContainerHigh,
+            ) {
+                Row(
+                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                ) {
+                    Icon(
+                        imageVector = HugeIcons.CommandLine,
+                        contentDescription = null,
+                        modifier = Modifier.size(14.dp),
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    Text(
+                        text = "/${skill.directoryName}",
+                        style = MaterialTheme.typography.labelMedium,
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
 private fun TermuxCommandModePrefix() {
     Surface(
         color = MaterialTheme.colorScheme.surfaceContainerHighest,
@@ -645,6 +709,9 @@ private fun MediaFileInputRow(
 ) {
     val filesManager: FilesManager = koinInject()
     val managedFiles by filesManager.observe().collectAsState(initial = emptyList())
+    val imageFallback = stringResource(R.string.setting_provider_page_image)
+    val videoFallback = stringResource(R.string.video)
+    val audioFallback = stringResource(R.string.audio)
     val displayNameByRelativePath = remember(managedFiles) {
         managedFiles.associate { it.relativePath to it.displayName }
     }
@@ -672,7 +739,7 @@ private fun MediaFileInputRow(
                     AttachmentChip(
                         title = attachmentNameFromUrl(
                             url = part.url,
-                            fallback = "image",
+                            fallback = imageFallback,
                             displayNameByRelativePath = displayNameByRelativePath,
                             displayNameByFileName = displayNameByFileName
                         ),
@@ -701,7 +768,7 @@ private fun MediaFileInputRow(
                     AttachmentChip(
                         title = attachmentNameFromUrl(
                             url = part.url,
-                            fallback = "video",
+                            fallback = videoFallback,
                             displayNameByRelativePath = displayNameByRelativePath,
                             displayNameByFileName = displayNameByFileName
                         ),
@@ -714,7 +781,7 @@ private fun MediaFileInputRow(
                     AttachmentChip(
                         title = attachmentNameFromUrl(
                             url = part.url,
-                            fallback = "audio",
+                            fallback = audioFallback,
                             displayNameByRelativePath = displayNameByRelativePath,
                             displayNameByFileName = displayNameByFileName
                         ),
@@ -1321,6 +1388,7 @@ fun AudioPickButton(onAddAudios: (List<Uri>) -> Unit = {}) {
 
 @Composable
 fun FilePickButton(onAddFiles: (List<UIMessagePart.Document>) -> Unit = {}) {
+    val resources = LocalContext.current.resources
     val toaster = LocalToaster.current
     val filesManager: FilesManager = koinInject()
     val pickMedia =
@@ -1346,7 +1414,8 @@ fun FilePickButton(onAddFiles: (List<UIMessagePart.Document>) -> Unit = {}) {
                 )
 
                 val documents = uris.mapNotNull { uri ->
-                    val fileName = filesManager.getFileNameFromUri(uri) ?: "file"
+                    val fileName = filesManager.getFileNameFromUri(uri)
+                        ?: resources.getString(R.string.chat_input_attachment_fallback_file)
                     val mime = filesManager.resolveMimeType(uri, fileName)
 
                     // Filter by MIME type or file extension
@@ -1383,7 +1452,10 @@ fun FilePickButton(onAddFiles: (List<UIMessagePart.Document>) -> Unit = {}) {
                             mime = mime
                         )
                     } else {
-                        toaster.show("不支持的文件类型: $fileName", type = ToastType.Error)
+                        toaster.show(
+                            resources.getString(R.string.chat_input_unsupported_file_type, fileName),
+                            type = ToastType.Error,
+                        )
                         null
                     }
                 }

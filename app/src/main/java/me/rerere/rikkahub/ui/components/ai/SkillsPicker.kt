@@ -1,10 +1,9 @@
 package me.rerere.rikkahub.ui.components.ai
 
-import android.content.Context
 import android.net.Uri
-import android.provider.OpenableColumns
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -12,7 +11,6 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -25,13 +23,11 @@ import androidx.compose.material3.Badge
 import androidx.compose.material3.BadgedBox
 import androidx.compose.material3.Card
 import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedButton
-import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -59,23 +55,26 @@ import me.rerere.hugeicons.HugeIcons
 import me.rerere.hugeicons.stroke.Add01
 import me.rerere.hugeicons.stroke.Alert01
 import me.rerere.hugeicons.stroke.Cancel01
-import me.rerere.hugeicons.stroke.Delete01
 import me.rerere.hugeicons.stroke.FileImport
-import me.rerere.hugeicons.stroke.PencilEdit01
 import me.rerere.hugeicons.stroke.Puzzle
 import me.rerere.rikkahub.R
 import me.rerere.rikkahub.data.ai.tools.LocalToolOption
 import me.rerere.rikkahub.data.model.Assistant
 import me.rerere.rikkahub.data.skills.SkillCatalogEntry
 import me.rerere.rikkahub.data.skills.SkillEditorDocument
-import me.rerere.rikkahub.data.skills.SkillInvalidEntry
-import me.rerere.rikkahub.data.skills.SkillInvalidReason
+import me.rerere.rikkahub.data.skills.SkillImportPreview
+import me.rerere.rikkahub.data.skills.SkillSourceType
 import me.rerere.rikkahub.data.skills.SkillsCatalogState
 import me.rerere.rikkahub.data.skills.SkillsRepository
-import me.rerere.rikkahub.data.skills.sanitizeSkillDirectoryName
 import me.rerere.rikkahub.ui.components.ui.ToggleSurface
 import me.rerere.rikkahub.ui.context.LocalToaster
 import org.koin.compose.koinInject
+
+private data class PendingSkillImport(
+    val uri: Uri,
+    val displayName: String?,
+    val preview: SkillImportPreview,
+)
 
 @Composable
 fun SkillsPickerButton(
@@ -94,7 +93,7 @@ fun SkillsPickerButton(
     }
 
     LaunchedEffect(showPicker) {
-        if (showPicker && !skillsState.isLoading && (skillsState.refreshedAt == 0L || skillsState.error != null)) {
+        if (showPicker && !skillsState.isLoading && skillsState.refreshedAt == 0L) {
             skillsRepository.requestRefresh()
         }
     }
@@ -199,31 +198,38 @@ fun SkillsPicker(
     } else {
         skillsState.rootPath
     }
+    val builtInSectionTitle = stringResource(R.string.assistant_page_skills_section_built_in)
+    val importedSectionTitle = stringResource(R.string.assistant_page_skills_section_imported)
+    val localSectionTitle = stringResource(R.string.assistant_page_skills_section_local)
 
     var showCreateDialog by remember { mutableStateOf(false) }
-    var createName by remember { mutableStateOf("") }
-    var createDirectory by remember { mutableStateOf("") }
-    var createDescription by remember { mutableStateOf("") }
-    var createBody by remember { mutableStateOf("") }
-    var createDirectoryEdited by remember { mutableStateOf(false) }
+    var createDraft by remember { mutableStateOf(emptySkillEditorDraft()) }
     var isCreating by remember { mutableStateOf(false) }
+    var isLoadingImportPreview by remember { mutableStateOf(false) }
     var isImporting by remember { mutableStateOf(false) }
+    var pendingImport by remember { mutableStateOf<PendingSkillImport?>(null) }
     var editDocument by remember { mutableStateOf<SkillEditorDocument?>(null) }
     var isLoadingEditor by remember { mutableStateOf(false) }
     var isSavingEditor by remember { mutableStateOf(false) }
     var deleteEntry by remember { mutableStateOf<SkillCatalogEntry?>(null) }
+    var relinkMissingDirectoryName by remember { mutableStateOf<String?>(null) }
     var isDeleting by remember { mutableStateOf(false) }
     var showInvalidEntries by remember(skillsState.invalidEntries) {
         mutableStateOf(skillsState.invalidEntries.isNotEmpty())
     }
-    val actionInProgress = isCreating || isImporting || isLoadingEditor || isSavingEditor || isDeleting
+    val actionInProgress = isCreating || isLoadingImportPreview || isImporting || isLoadingEditor || isSavingEditor || isDeleting
+    val builtInEntries = remember(skillsState.entries) {
+        skillsState.entries.filter { it.isBundled }
+    }
+    val importedEntries = remember(skillsState.entries) {
+        skillsState.entries.filter { !it.isBundled && it.sourceType == SkillSourceType.IMPORTED }
+    }
+    val localEntries = remember(skillsState.entries) {
+        skillsState.entries.filter { !it.isBundled && it.sourceType != SkillSourceType.IMPORTED }
+    }
 
     fun resetCreateDialog() {
-        createName = ""
-        createDirectory = ""
-        createDescription = ""
-        createBody = ""
-        createDirectoryEdited = false
+        createDraft = emptySkillEditorDraft()
     }
 
     val zipImportLauncher = rememberLauncherForActivityResult(
@@ -231,35 +237,29 @@ fun SkillsPicker(
     ) { uri: Uri? ->
         uri?.let { selectedUri ->
             scope.launch {
-                isImporting = true
+                isLoadingImportPreview = true
                 try {
-                    val imported = withContext(Dispatchers.IO) {
+                    val displayName = queryDisplayName(context, selectedUri)
+                    val preview = withContext(Dispatchers.IO) {
                         context.contentResolver.openInputStream(selectedUri)?.use { inputStream ->
-                            skillsRepository.importSkillZip(
+                            skillsRepository.previewSkillZip(
                                 inputStream = inputStream,
-                                archiveName = queryDisplayName(context, selectedUri),
+                                archiveName = displayName,
                             )
                         } ?: error(resources.getString(R.string.assistant_page_skills_import_failed))
                     }
-                    val message = if (imported.directories.size == 1) {
-                        resources.getString(
-                            R.string.assistant_page_skills_import_success_single,
-                            imported.directories.single(),
-                        )
-                    } else {
-                        resources.getString(
-                            R.string.assistant_page_skills_import_success_multiple,
-                            imported.directories.size,
-                        )
-                    }
-                    toaster.show(message, type = ToastType.Success)
+                    pendingImport = PendingSkillImport(
+                        uri = selectedUri,
+                        displayName = displayName,
+                        preview = preview,
+                    )
                 } catch (error: Throwable) {
                     toaster.show(
                         error.message ?: resources.getString(R.string.assistant_page_skills_import_failed),
                         type = ToastType.Error,
                     )
                 } finally {
-                    isImporting = false
+                    isLoadingImportPreview = false
                 }
             }
         }
@@ -349,7 +349,7 @@ fun SkillsPicker(
                             Icon(HugeIcons.FileImport, contentDescription = null, modifier = Modifier.size(18.dp))
                             Box(modifier = Modifier.width(8.dp))
                             Text(
-                                text = if (isImporting) {
+                                text = if (isLoadingImportPreview || isImporting) {
                                     stringResource(R.string.assistant_page_skills_import_in_progress)
                                 } else {
                                     stringResource(R.string.assistant_page_skills_import_zip)
@@ -455,44 +455,51 @@ fun SkillsPicker(
                     modifier = Modifier.padding(horizontal = 4.dp),
                 )
             }
-            items(
-                items = skillsState.entries,
-                key = { it.directoryName },
-            ) { entry ->
-                SkillEntryCard(
-                    entry = entry,
-                    checked = entry.directoryName in assistant.selectedSkills,
-                    enabled = !actionInProgress,
-                    onEdit = {
-                        scope.launch {
-                            isLoadingEditor = true
-                            try {
-                                editDocument = skillsRepository.loadSkillDocument(entry)
-                            } catch (error: Throwable) {
-                                toaster.show(
-                                    error.message ?: resources.getString(R.string.assistant_page_skills_edit_load_failed),
-                                    type = ToastType.Error,
-                                )
-                            } finally {
-                                isLoadingEditor = false
-                            }
-                        }
-                    },
-                    onDelete = if (entry.isBundled) {
-                        null
-                    } else {
-                        {
-                            deleteEntry = entry
-                        }
-                    },
-                    onCheckedChange = { checked ->
-                        val nextSelection = assistant.selectedSkills.toMutableSet().apply {
-                            if (checked) add(entry.directoryName) else remove(entry.directoryName)
-                        }
-                        onUpdateAssistant(assistant.copy(selectedSkills = nextSelection))
-                    },
-                )
-            }
+            skillSection(
+                keyPrefix = "built-in",
+                title = builtInSectionTitle,
+                entries = builtInEntries,
+                assistant = assistant,
+                actionInProgress = actionInProgress,
+                scope = scope,
+                skillsRepository = skillsRepository,
+                resources = resources,
+                toaster = toaster,
+                onUpdateAssistant = onUpdateAssistant,
+                onLoadedEditor = { editDocument = it },
+                onLoadingEditorChange = { isLoadingEditor = it },
+                onDeleteRequested = { deleteEntry = it },
+            )
+            skillSection(
+                keyPrefix = "imported",
+                title = importedSectionTitle,
+                entries = importedEntries,
+                assistant = assistant,
+                actionInProgress = actionInProgress,
+                scope = scope,
+                skillsRepository = skillsRepository,
+                resources = resources,
+                toaster = toaster,
+                onUpdateAssistant = onUpdateAssistant,
+                onLoadedEditor = { editDocument = it },
+                onLoadingEditorChange = { isLoadingEditor = it },
+                onDeleteRequested = { deleteEntry = it },
+            )
+            skillSection(
+                keyPrefix = "local",
+                title = localSectionTitle,
+                entries = localEntries,
+                assistant = assistant,
+                actionInProgress = actionInProgress,
+                scope = scope,
+                skillsRepository = skillsRepository,
+                resources = resources,
+                toaster = toaster,
+                onUpdateAssistant = onUpdateAssistant,
+                onLoadedEditor = { editDocument = it },
+                onLoadingEditorChange = { isLoadingEditor = it },
+                onDeleteRequested = { deleteEntry = it },
+            )
         }
 
         if (missingSelections.isNotEmpty()) {
@@ -529,19 +536,29 @@ fun SkillsPicker(
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                             )
-                        }
-                        Switch(
-                            checked = true,
-                            onCheckedChange = { checked ->
-                                if (!checked) {
-                                    onUpdateAssistant(
-                                        assistant.copy(
-                                            selectedSkills = assistant.selectedSkills - directoryName
-                                        )
-                                    )
+                            FlowRow(
+                                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                verticalArrangement = Arrangement.spacedBy(8.dp),
+                            ) {
+                                TextButton(
+                                    enabled = skillsState.entries.isNotEmpty(),
+                                    onClick = { relinkMissingDirectoryName = directoryName },
+                                ) {
+                                    Text(stringResource(R.string.assistant_page_skills_missing_relink))
                                 }
-                            },
-                        )
+                                TextButton(
+                                    onClick = {
+                                        onUpdateAssistant(
+                                            assistant.copy(
+                                                selectedSkills = assistant.selectedSkills - directoryName
+                                            )
+                                        )
+                                    },
+                                ) {
+                                    Text(stringResource(R.string.assistant_page_remove))
+                                }
+                            }
+                        }
                     }
                 }
             }
@@ -580,11 +597,8 @@ fun SkillsPicker(
     }
 
     if (showCreateDialog) {
-        SkillEditorDialog(
-            name = createName,
-            directory = createDirectory,
-            description = createDescription,
-            body = createBody,
+        SkillEditorSheet(
+            draft = createDraft,
             title = stringResource(R.string.assistant_page_skills_create_title),
             confirmText = stringResource(R.string.assistant_page_skills_create_confirm),
             progressText = stringResource(R.string.assistant_page_skills_create_in_progress),
@@ -594,27 +608,17 @@ fun SkillsPicker(
                     showCreateDialog = false
                 }
             },
-            onNameChange = { value ->
-                createName = value
-                if (!createDirectoryEdited) {
-                    createDirectory = sanitizeSkillDirectoryName(value)
-                }
-            },
-            onDirectoryChange = { value ->
-                createDirectoryEdited = true
-                createDirectory = sanitizeSkillDirectoryName(value)
-            },
-            onDescriptionChange = { createDescription = it },
-            onBodyChange = { createBody = it },
+            onDraftChange = { createDraft = it },
             onConfirm = {
                 scope.launch {
                     isCreating = true
                     try {
                         val created = skillsRepository.createSkill(
-                            directoryName = createDirectory,
-                            name = createName,
-                            description = createDescription,
-                            body = createBody,
+                            directoryName = createDraft.directoryName,
+                            name = createDraft.name,
+                            description = createDraft.description,
+                            body = createDraft.body,
+                            extras = createDraft.extras,
                         )
                         toaster.show(
                             resources.getString(
@@ -712,12 +716,171 @@ fun SkillsPicker(
         )
     }
 
+    relinkMissingDirectoryName?.let { missingDirectoryName ->
+        AlertDialog(
+            onDismissRequest = { relinkMissingDirectoryName = null },
+            title = { Text(stringResource(R.string.assistant_page_skills_missing_relink_title)) },
+            text = {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .verticalScroll(rememberScrollState()),
+                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    Text(
+                        text = stringResource(
+                            R.string.assistant_page_skills_missing_relink_desc,
+                            missingDirectoryName,
+                        ),
+                        style = MaterialTheme.typography.bodyMedium,
+                    )
+                    skillsState.entries.forEach { entry ->
+                        Card(
+                            onClick = {
+                                val nextSelection = assistant.selectedSkills.toMutableSet().apply {
+                                    remove(missingDirectoryName)
+                                    add(entry.directoryName)
+                                }
+                                onUpdateAssistant(assistant.copy(selectedSkills = nextSelection))
+                                relinkMissingDirectoryName = null
+                            },
+                        ) {
+                            Column(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(horizontal = 16.dp, vertical = 12.dp),
+                                verticalArrangement = Arrangement.spacedBy(4.dp),
+                            ) {
+                                Text(entry.name, style = MaterialTheme.typography.titleMedium)
+                                Text(
+                                    entry.directoryName,
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                )
+                                Text(
+                                    entry.description,
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                )
+                            }
+                        }
+                    }
+                }
+            },
+            confirmButton = {},
+            dismissButton = {
+                TextButton(
+                    onClick = { relinkMissingDirectoryName = null },
+                ) {
+                    Text(stringResource(R.string.cancel))
+                }
+            },
+        )
+    }
+
+    pendingImport?.let { currentImport ->
+        AlertDialog(
+            onDismissRequest = {
+                if (!isImporting) {
+                    pendingImport = null
+                }
+            },
+            title = {
+                Text(
+                    text = currentImport.displayName?.let {
+                        resources.getString(R.string.assistant_page_skills_import_preview_title_named, it)
+                    } ?: stringResource(R.string.assistant_page_skills_import_preview_title)
+                )
+            },
+            text = {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .verticalScroll(rememberScrollState()),
+                    verticalArrangement = Arrangement.spacedBy(12.dp),
+                ) {
+                    val preview = currentImport.preview
+                    Text(
+                        text = stringResource(
+                            R.string.assistant_page_skills_import_preview_summary,
+                            preview.directories.size,
+                            preview.totalFiles,
+                        ),
+                        style = MaterialTheme.typography.bodyMedium,
+                    )
+                    SkillImportPreviewSummary(preview = preview)
+                    if (preview.hasScripts) {
+                        SkillsInfoCard(
+                            title = stringResource(R.string.assistant_page_skills_import_preview_review_title),
+                            text = stringResource(R.string.assistant_page_skills_import_preview_review_desc),
+                            isError = false,
+                        )
+                    }
+                }
+            },
+            confirmButton = {
+                TextButton(
+                    enabled = !isImporting,
+                    onClick = {
+                        scope.launch {
+                            val latestImport = pendingImport ?: return@launch
+                            isImporting = true
+                            try {
+                                val imported = withContext(Dispatchers.IO) {
+                                    context.contentResolver.openInputStream(latestImport.uri)?.use { inputStream ->
+                                        skillsRepository.importSkillZip(
+                                            inputStream = inputStream,
+                                            archiveName = latestImport.displayName,
+                                        )
+                                    } ?: error(resources.getString(R.string.assistant_page_skills_import_failed))
+                                }
+                                val message = if (imported.directories.size == 1) {
+                                    resources.getString(
+                                        R.string.assistant_page_skills_import_success_single,
+                                        imported.directories.single(),
+                                    )
+                                } else {
+                                    resources.getString(
+                                        R.string.assistant_page_skills_import_success_multiple,
+                                        imported.directories.size,
+                                    )
+                                }
+                                toaster.show(message, type = ToastType.Success)
+                                pendingImport = null
+                            } catch (error: Throwable) {
+                                toaster.show(
+                                    error.message ?: resources.getString(R.string.assistant_page_skills_import_failed),
+                                    type = ToastType.Error,
+                                )
+                            } finally {
+                                isImporting = false
+                            }
+                        }
+                    },
+                ) {
+                    Text(
+                        text = if (isImporting) {
+                            stringResource(R.string.assistant_page_skills_import_in_progress)
+                        } else {
+                            stringResource(R.string.assistant_page_skills_install)
+                        }
+                    )
+                }
+            },
+            dismissButton = {
+                TextButton(
+                    enabled = !isImporting,
+                    onClick = { pendingImport = null },
+                ) {
+                    Text(stringResource(R.string.cancel))
+                }
+            },
+        )
+    }
+
     editDocument?.let { currentDocument ->
-        SkillEditorDialog(
-            name = currentDocument.name,
-            directory = currentDocument.directoryName,
-            description = currentDocument.description,
-            body = currentDocument.body,
+        SkillEditorSheet(
+            draft = currentDocument.toEditorDraft(),
             title = stringResource(R.string.assistant_page_skills_edit_title),
             confirmText = stringResource(R.string.assistant_page_skills_edit_confirm),
             progressText = stringResource(R.string.assistant_page_skills_edit_in_progress),
@@ -727,17 +890,8 @@ fun SkillsPicker(
                     editDocument = null
                 }
             },
-            onNameChange = { value ->
-                editDocument = currentDocument.copy(name = value)
-            },
-            onDirectoryChange = { value ->
-                editDocument = currentDocument.copy(directoryName = sanitizeSkillDirectoryName(value))
-            },
-            onDescriptionChange = { value ->
-                editDocument = currentDocument.copy(description = value)
-            },
-            onBodyChange = { value ->
-                editDocument = currentDocument.copy(body = value)
+            onDraftChange = { draft ->
+                editDocument = editDocument?.withDraft(draft)
             },
             onConfirm = {
                 scope.launch {
@@ -750,6 +904,7 @@ fun SkillsPicker(
                             name = latestDocument.name,
                             description = latestDocument.description,
                             body = latestDocument.body,
+                            extras = latestDocument.extras,
                         )
                         if (latestDocument.originalDirectoryName in assistant.selectedSkills &&
                             latestDocument.originalDirectoryName != saved.directoryName
@@ -779,283 +934,5 @@ fun SkillsPicker(
                 }
             },
         )
-    }
-}
-
-@Composable
-private fun SkillEditorDialog(
-    name: String,
-    directory: String,
-    description: String,
-    body: String,
-    title: String,
-    confirmText: String,
-    progressText: String,
-    isSaving: Boolean,
-    onDismiss: () -> Unit,
-    onNameChange: (String) -> Unit,
-    onDirectoryChange: (String) -> Unit,
-    onDescriptionChange: (String) -> Unit,
-    onBodyChange: (String) -> Unit,
-    onConfirm: () -> Unit,
-) {
-    val canConfirm = name.isNotBlank() && description.isNotBlank() && !isSaving
-
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text(title) },
-        text = {
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .verticalScroll(rememberScrollState())
-                    .imePadding(),
-                verticalArrangement = Arrangement.spacedBy(12.dp),
-            ) {
-                OutlinedTextField(
-                    modifier = Modifier.fillMaxWidth(),
-                    value = name,
-                    onValueChange = onNameChange,
-                    singleLine = true,
-                    label = { Text(stringResource(R.string.assistant_page_skills_create_name)) },
-                )
-                OutlinedTextField(
-                    modifier = Modifier.fillMaxWidth(),
-                    value = directory,
-                    onValueChange = onDirectoryChange,
-                    singleLine = true,
-                    label = { Text(stringResource(R.string.assistant_page_skills_create_directory)) },
-                )
-                OutlinedTextField(
-                    modifier = Modifier.fillMaxWidth(),
-                    value = description,
-                    onValueChange = onDescriptionChange,
-                    singleLine = true,
-                    label = { Text(stringResource(R.string.assistant_page_skills_create_description)) },
-                )
-                OutlinedTextField(
-                    modifier = Modifier.fillMaxWidth(),
-                    value = body,
-                    onValueChange = onBodyChange,
-                    minLines = 6,
-                    label = { Text(stringResource(R.string.assistant_page_skills_create_body)) },
-                    placeholder = {
-                        Text(stringResource(R.string.assistant_page_skills_create_body_placeholder))
-                    },
-                )
-            }
-        },
-        confirmButton = {
-            TextButton(
-                enabled = canConfirm,
-                onClick = onConfirm,
-            ) {
-                Text(
-                    text = if (isSaving) {
-                        progressText
-                    } else {
-                        confirmText
-                    }
-                )
-            }
-        },
-        dismissButton = {
-            TextButton(
-                enabled = !isSaving,
-                onClick = onDismiss,
-            ) {
-                Text(stringResource(R.string.cancel))
-            }
-        },
-    )
-}
-
-@Composable
-private fun SkillEntryCard(
-    entry: SkillCatalogEntry,
-    checked: Boolean,
-    enabled: Boolean,
-    onEdit: () -> Unit,
-    onDelete: (() -> Unit)?,
-    onCheckedChange: (Boolean) -> Unit,
-) {
-    Card(
-        onClick = onEdit,
-        enabled = enabled,
-    ) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 16.dp, vertical = 12.dp),
-            horizontalArrangement = Arrangement.spacedBy(16.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Icon(HugeIcons.Puzzle, contentDescription = null)
-            Column(
-                modifier = Modifier.weight(1f),
-                verticalArrangement = Arrangement.spacedBy(4.dp),
-            ) {
-                Text(
-                    text = entry.name,
-                    style = MaterialTheme.typography.titleMedium,
-                )
-                if (entry.name != entry.directoryName) {
-                    Text(
-                        text = entry.directoryName,
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                }
-                Text(
-                    text = entry.description,
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-                HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp))
-                Text(
-                    text = entry.path,
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-            }
-            Column(
-                horizontalAlignment = Alignment.End,
-                verticalArrangement = Arrangement.spacedBy(4.dp),
-            ) {
-                IconButton(
-                    enabled = enabled,
-                    onClick = onEdit,
-                ) {
-                    Icon(
-                        imageVector = HugeIcons.PencilEdit01,
-                        contentDescription = stringResource(R.string.assistant_page_skills_edit_title),
-                    )
-                }
-                onDelete?.let { deleteSkill ->
-                    IconButton(
-                        enabled = enabled,
-                        onClick = deleteSkill,
-                    ) {
-                        Icon(
-                            imageVector = HugeIcons.Delete01,
-                            contentDescription = stringResource(R.string.delete),
-                        )
-                    }
-                }
-                Switch(
-                    checked = checked,
-                    enabled = enabled,
-                    onCheckedChange = onCheckedChange,
-                )
-            }
-        }
-    }
-}
-
-@Composable
-private fun InvalidSkillEntryCard(entry: SkillInvalidEntry) {
-    Card {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 16.dp, vertical = 12.dp),
-            horizontalArrangement = Arrangement.spacedBy(16.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Icon(HugeIcons.Alert01, contentDescription = null)
-            Column(
-                modifier = Modifier.weight(1f),
-                verticalArrangement = Arrangement.spacedBy(4.dp),
-            ) {
-                Text(
-                    text = entry.directoryName,
-                    style = MaterialTheme.typography.titleMedium,
-                )
-                Text(
-                    text = localizedSkillInvalidReason(entry.reason),
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-                Text(
-                    text = entry.path,
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-            }
-        }
-    }
-}
-
-@Composable
-private fun localizedSkillInvalidReason(reason: SkillInvalidReason): String {
-    return when (reason) {
-        SkillInvalidReason.MissingSkillFile -> stringResource(R.string.assistant_page_skills_reason_missing_skill_md)
-        SkillInvalidReason.MissingYamlFrontmatter -> stringResource(
-            R.string.assistant_page_skills_reason_missing_yaml_frontmatter
-        )
-        SkillInvalidReason.FrontmatterMustStart -> stringResource(
-            R.string.assistant_page_skills_reason_frontmatter_must_start
-        )
-        SkillInvalidReason.FrontmatterNotClosed -> stringResource(
-            R.string.assistant_page_skills_reason_frontmatter_not_closed
-        )
-        SkillInvalidReason.MissingName -> stringResource(R.string.assistant_page_skills_reason_missing_name)
-        SkillInvalidReason.MissingDescription -> stringResource(
-            R.string.assistant_page_skills_reason_missing_description
-        )
-        is SkillInvalidReason.FailedToRead -> stringResource(
-            R.string.assistant_page_skills_reason_failed_to_read,
-            reason.detail,
-        )
-        is SkillInvalidReason.Other -> reason.message
-    }
-}
-
-@Composable
-private fun SkillsInfoCard(
-    title: String,
-    text: String,
-    isError: Boolean,
-) {
-    Card {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 16.dp, vertical = 12.dp),
-            horizontalArrangement = Arrangement.spacedBy(16.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Icon(
-                imageVector = HugeIcons.Alert01,
-                contentDescription = null,
-                tint = if (isError) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary,
-            )
-            Column(
-                modifier = Modifier.weight(1f),
-                verticalArrangement = Arrangement.spacedBy(4.dp),
-            ) {
-                Text(
-                    text = title,
-                    style = MaterialTheme.typography.titleMedium,
-                    color = if (isError) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurface,
-                )
-                Text(
-                    text = text,
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-            }
-        }
-    }
-}
-
-private fun queryDisplayName(context: Context, uri: Uri): String? {
-    return context.contentResolver.query(uri, null, null, null, null)?.use { cursor ->
-        if (cursor.moveToFirst()) {
-            val nameIndex = cursor.getColumnIndex(OpenableColumns.DISPLAY_NAME)
-            if (nameIndex >= 0) cursor.getString(nameIndex) else null
-        } else {
-            null
-        }
     }
 }

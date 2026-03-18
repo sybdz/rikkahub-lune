@@ -41,8 +41,11 @@ import me.rerere.rikkahub.data.datastore.findModelById
 import me.rerere.rikkahub.data.datastore.findProvider
 import me.rerere.rikkahub.data.model.Assistant
 import me.rerere.rikkahub.data.model.AssistantMemory
+import me.rerere.rikkahub.data.skills.buildActivatedSkillsPrompt
 import me.rerere.rikkahub.data.skills.SkillsRepository
 import me.rerere.rikkahub.data.skills.buildSkillsCatalogPrompt
+import me.rerere.rikkahub.data.skills.resolveExplicitSkillInvocations
+import me.rerere.rikkahub.data.skills.shouldInjectSkillsCatalog
 import me.rerere.rikkahub.data.repository.ConversationRepository
 import me.rerere.rikkahub.data.repository.MemoryRepository
 import me.rerere.rikkahub.utils.applyPlaceholders
@@ -333,6 +336,20 @@ class GenerationHandler(
         memories: List<AssistantMemory>,
         stream: Boolean
     ) {
+        val skillsCatalog = skillsRepository.state.value
+        val activatedSkillsPrompt = if (shouldInjectSkillsCatalog(assistant, model)) {
+            val explicitSkillInvocations = resolveExplicitSkillInvocations(
+                messages = messages,
+                availableSkills = skillsCatalog.entries.filter { it.directoryName in assistant.selectedSkills },
+            )
+            buildActivatedSkillsPrompt(
+                skillsRepository.loadSkillActivations(
+                    explicitSkillInvocations.map { it.directoryName }
+                )
+            )
+        } else {
+            null
+        }
         val internalMessages = buildList {
             val system = buildString {
                 // 如果助手有系统提示，则添加到消息中
@@ -353,8 +370,12 @@ class GenerationHandler(
                 buildSkillsCatalogPrompt(
                     assistant = assistant,
                     model = model,
-                    catalog = skillsRepository.state.value,
+                    catalog = skillsCatalog,
                 )?.let {
+                    appendLine()
+                    append(it)
+                }
+                activatedSkillsPrompt?.let {
                     appendLine()
                     append(it)
                 }
