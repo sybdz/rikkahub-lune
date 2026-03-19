@@ -44,6 +44,7 @@ import me.rerere.rikkahub.data.skills.SkillInvalidEntry
 import me.rerere.rikkahub.data.skills.SkillInvalidReason
 import me.rerere.rikkahub.data.skills.SkillSourceType
 import me.rerere.rikkahub.data.skills.SkillsRepository
+import me.rerere.rikkahub.data.skills.normalizeSkillFrontmatterExtras
 
 internal fun LazyListScope.skillSection(
     keyPrefix: String,
@@ -430,16 +431,18 @@ internal fun buildSkillFrontmatterExtras(
     userInvocable: Boolean,
     disableModelInvocation: Boolean,
 ): SkillFrontmatterExtras {
-    return SkillFrontmatterExtras(
-        license = license.ifBlank { null },
-        compatibility = compatibility.ifBlank { null },
-        allowedTools = allowedTools.ifBlank { null },
-        argumentHint = argumentHint.ifBlank { null },
-        userInvocable = userInvocable,
-        disableModelInvocation = disableModelInvocation,
-        metadata = buildMap {
-            if (author.isNotBlank()) put("author", author)
-            if (version.isNotBlank()) put("version", version)
-        },
+    return normalizeSkillFrontmatterExtras(
+        SkillFrontmatterExtras(
+            license = license.ifBlank { null },
+            compatibility = compatibility.ifBlank { null },
+            allowedTools = allowedTools.ifBlank { null },
+            argumentHint = argumentHint.ifBlank { null },
+            userInvocable = userInvocable,
+            disableModelInvocation = disableModelInvocation,
+            metadata = buildMap {
+                if (author.isNotBlank()) put("author", author)
+                if (version.isNotBlank()) put("version", version)
+            },
+        )
     )
 }

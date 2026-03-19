@@ -218,7 +218,7 @@ class SkillsRepositoryTest {
     }
 
     @Test
-    fun `shouldRefreshBundledSkillInstallation should backfill legacy bundled metadata`() {
+    fun `bundled skill metadata should backfill before any reinstall check`() {
         val bundledSkill = BundledSkill(
             directoryName = "skill-creator",
             assetPath = "builtin_skills/skill-creator",
@@ -230,6 +230,9 @@ class SkillsRepositoryTest {
         )
 
         assertTrue(
+            shouldBackfillBundledSkillMetadata(installedMetadata = null)
+        )
+        assertFalse(
             shouldRefreshBundledSkillInstallation(
                 bundledSkill = bundledSkill,
                 installedMetadata = null,
@@ -257,6 +260,36 @@ class SkillsRepositoryTest {
                 expectedMetadata = expectedMetadata,
             )
         )
+    }
+
+    @Test
+    fun `resolveUpdatedSkillSourceMetadata should reset bundled provenance after rename`() {
+        val resolved = resolveUpdatedSkillSourceMetadata(
+            existingMetadata = SkillSourceMetadata(
+                sourceType = SkillSourceType.BUNDLED,
+                sourceId = "skill-creator",
+                hash = "abc",
+            ),
+            originalDirectoryName = "skill-creator",
+            finalDirectoryName = "skill-creator-custom",
+        )
+
+        assertEquals(SkillSourceType.LOCAL, resolved.sourceType)
+        assertEquals("skill-creator-custom", resolved.sourceId)
+        assertNull(resolved.hash)
+    }
+
+    @Test
+    fun `normalizeSkillFrontmatterExtras should keep at least one activation path`() {
+        val normalized = normalizeSkillFrontmatterExtras(
+            SkillFrontmatterExtras(
+                userInvocable = false,
+                disableModelInvocation = true,
+            )
+        )
+
+        assertFalse(normalized.disableModelInvocation)
+        assertTrue(normalized.hasActivationPath())
     }
 
     @Test
@@ -292,7 +325,7 @@ class SkillsRepositoryTest {
                 compatibility = "termux",
                 allowedTools = "Bash Read",
                 argumentHint = "<path-to-skill>",
-                userInvocable = false,
+                userInvocable = true,
                 disableModelInvocation = true,
                 metadata = mapOf(
                     "author" to "anthropic",
@@ -306,10 +339,27 @@ class SkillsRepositoryTest {
         assertEquals("termux", parsed.frontmatter.compatibility)
         assertEquals("Bash Read", parsed.frontmatter.allowedTools)
         assertEquals("<path-to-skill>", parsed.frontmatter.argumentHint)
-        assertFalse(parsed.frontmatter.userInvocable)
+        assertTrue(parsed.frontmatter.userInvocable)
         assertFalse(parsed.frontmatter.modelInvocable)
         assertEquals("anthropic", parsed.frontmatter.author)
         assertEquals("1.2.3", parsed.frontmatter.version)
+    }
+
+    @Test
+    fun `buildSkillMarkdown should reject skills without any activation path`() {
+        val result = runCatching {
+            buildSkillMarkdown(
+                name = "Manual Trap",
+                description = "Cannot be triggered",
+                body = "",
+                extras = SkillFrontmatterExtras(
+                    userInvocable = false,
+                    disableModelInvocation = true,
+                ),
+            )
+        }
+
+        assertTrue(result.isFailure)
     }
 
     @Test

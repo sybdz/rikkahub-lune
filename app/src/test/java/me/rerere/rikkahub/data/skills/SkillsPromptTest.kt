@@ -259,6 +259,33 @@ class SkillsPromptTest {
     }
 
     @Test
+    fun `resolveExplicitSkillInvocations should ignore file paths and urls`() {
+        val resolved = resolveExplicitSkillInvocations(
+            messages = listOf(
+                UIMessage.user(
+                    "Check /tmp/log.txt and https://example.com/@tmp before using @manual-only."
+                )
+            ),
+            availableSkills = listOf(
+                SkillCatalogEntry(
+                    directoryName = "tmp",
+                    path = "/skills/tmp",
+                    name = "tmp",
+                    description = "Path collision",
+                ),
+                SkillCatalogEntry(
+                    directoryName = "manual-only",
+                    path = "/skills/manual-only",
+                    name = "manual-only",
+                    description = "Manual only",
+                ),
+            ),
+        )
+
+        assertEquals(listOf("manual-only"), resolved.map { it.directoryName })
+    }
+
+    @Test
     fun `buildActivatedSkillsPrompt should include skill contents and resources`() {
         val prompt = buildActivatedSkillsPrompt(
             listOf(

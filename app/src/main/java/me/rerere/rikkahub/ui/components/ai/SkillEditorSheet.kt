@@ -25,6 +25,8 @@ import androidx.compose.ui.unit.dp
 import me.rerere.rikkahub.R
 import me.rerere.rikkahub.data.skills.SkillEditorDocument
 import me.rerere.rikkahub.data.skills.SkillFrontmatterExtras
+import me.rerere.rikkahub.data.skills.hasActivationPath
+import me.rerere.rikkahub.data.skills.normalizeSkillFrontmatterExtras
 import me.rerere.rikkahub.data.skills.sanitizeSkillDirectoryName
 
 internal data class SkillEditorDraft(
@@ -37,6 +39,10 @@ internal data class SkillEditorDraft(
 )
 
 internal fun emptySkillEditorDraft(): SkillEditorDraft = SkillEditorDraft()
+
+internal fun SkillEditorDraft.updateExtras(value: SkillFrontmatterExtras): SkillEditorDraft = copy(
+    extras = normalizeSkillFrontmatterExtras(value),
+)
 
 internal fun SkillEditorDraft.updateName(value: String): SkillEditorDraft = copy(
     name = value,
@@ -53,7 +59,7 @@ internal fun SkillEditorDocument.toEditorDraft(): SkillEditorDraft = SkillEditor
     directoryName = directoryName,
     description = description,
     body = body,
-    extras = extras,
+    extras = normalizeSkillFrontmatterExtras(extras),
     directoryEdited = true,
 )
 
@@ -76,7 +82,10 @@ internal fun SkillEditorSheet(
     onDraftChange: (SkillEditorDraft) -> Unit,
     onConfirm: () -> Unit,
 ) {
-    val canConfirm = draft.name.isNotBlank() && draft.description.isNotBlank() && !isSaving
+    val canConfirm = draft.name.isNotBlank() &&
+        draft.description.isNotBlank() &&
+        draft.extras.hasActivationPath() &&
+        !isSaving
 
     ModalBottomSheet(
         onDismissRequest = onDismiss,
@@ -226,7 +235,7 @@ internal fun SkillEditorSheet(
                     Switch(
                         checked = draft.extras.userInvocable,
                         onCheckedChange = {
-                            onDraftChange(draft.copy(extras = draft.extras.copy(userInvocable = it)))
+                            onDraftChange(draft.updateExtras(draft.extras.copy(userInvocable = it)))
                         },
                     )
                 }
@@ -251,8 +260,9 @@ internal fun SkillEditorSheet(
                     }
                     Switch(
                         checked = draft.extras.disableModelInvocation,
+                        enabled = draft.extras.userInvocable,
                         onCheckedChange = {
-                            onDraftChange(draft.copy(extras = draft.extras.copy(disableModelInvocation = it)))
+                            onDraftChange(draft.updateExtras(draft.extras.copy(disableModelInvocation = it)))
                         },
                     )
                 }

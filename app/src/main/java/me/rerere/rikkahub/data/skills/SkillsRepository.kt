@@ -182,6 +182,13 @@ data class SkillFrontmatterExtras(
     val author: String? = metadata["author"]
 }
 
+internal fun SkillFrontmatterExtras.hasActivationPath(): Boolean = userInvocable || modelInvocable
+
+internal fun normalizeSkillFrontmatterExtras(extras: SkillFrontmatterExtras): SkillFrontmatterExtras {
+    if (extras.hasActivationPath()) return extras
+    return extras.copy(disableModelInvocation = false)
+}
+
 internal sealed interface SkillFrontmatterParseResult {
     data class Success(val frontmatter: SkillFrontmatter) : SkillFrontmatterParseResult
     data class Error(val reason: SkillInvalidReason) : SkillFrontmatterParseResult
@@ -299,6 +306,7 @@ class SkillsRepository(
     ): SkillCreationResult {
         require(name.isNotBlank()) { "Skill name cannot be empty" }
         require(description.isNotBlank()) { "Skill description cannot be empty" }
+        require(extras.hasActivationPath()) { "Skill must remain invocable by the user or the model" }
 
         return runCatalogMutation { workdir, rootPath ->
             ensureSkillsRootDirectory(rootPath = rootPath, workdir = workdir)
@@ -380,6 +388,7 @@ class SkillsRepository(
         require(originalDirectoryName.isNotBlank()) { "Original skill directory cannot be empty" }
         require(name.isNotBlank()) { "Skill name cannot be empty" }
         require(description.isNotBlank()) { "Skill description cannot be empty" }
+        require(extras.hasActivationPath()) { "Skill must remain invocable by the user or the model" }
 
         return runCatalogMutation { workdir, rootPath ->
             ensureSkillsRootDirectory(rootPath = rootPath, workdir = workdir)
@@ -427,15 +436,16 @@ class SkillsRepository(
             val sourceMetadata = readSkillSourceMetadata(
                 directoryPath = "$rootPath/$finalDirectoryName",
                 workdir = workdir,
-            ) ?: SkillSourceMetadata(
-                sourceType = SkillSourceType.LOCAL,
-                sourceId = finalDirectoryName,
             )
             writeSkillSourceMetadata(
                 rootPath = rootPath,
                 workdir = workdir,
                 directoryName = finalDirectoryName,
-                metadata = sourceMetadata.copy(sourceId = sourceMetadata.sourceId ?: finalDirectoryName),
+                metadata = resolveUpdatedSkillSourceMetadata(
+                    existingMetadata = sourceMetadata,
+                    originalDirectoryName = originalDirectoryName,
+                    finalDirectoryName = finalDirectoryName,
+                ),
             )
 
             SkillCreationResult(
@@ -860,6 +870,20 @@ class SkillsRepository(
                     workdir = workdir,
                 )
             }.getOrNull()
+            if (shouldBackfillBundledSkillMetadata(installedMetadata)) {
+                runCatching {
+                    writeSkillSourceMetadata(
+                        rootPath = rootPath,
+                        workdir = workdir,
+                        directoryName = bundledSkill.directoryName,
+                        metadata = expectedMetadata,
+                    )
+                    installedAny = true
+                }.onFailure { error ->
+                    Log.w(TAG, "Failed to backfill bundled skill metadata ${bundledSkill.directoryName}", error)
+                }
+                return@forEach
+            }
             if (!shouldRefreshBundledSkillInstallation(bundledSkill, installedMetadata, expectedMetadata)) return@forEach
             runCatching {
                 installBundledSkill(
@@ -1547,12 +1571,36 @@ internal fun buildSkillReadFailureReason(error: Throwable): SkillInvalidReason {
     return SkillInvalidReason.FailedToRead(detail)
 }
 
+internal fun resolveUpdatedSkillSourceMetadata(
+    existingMetadata: SkillSourceMetadata?,
+    originalDirectoryName: String,
+    finalDirectoryName: String,
+): SkillSourceMetadata {
+    if (existingMetadata == null) {
+        return SkillSourceMetadata(
+            sourceType = SkillSourceType.LOCAL,
+            sourceId = finalDirectoryName,
+        )
+    }
+    if (existingMetadata.sourceType == SkillSourceType.BUNDLED && originalDirectoryName != finalDirectoryName) {
+        return SkillSourceMetadata(
+            sourceType = SkillSourceType.LOCAL,
+            sourceId = finalDirectoryName,
+        )
+    }
+    return existingMetadata.copy(sourceId = existingMetadata.sourceId ?: finalDirectoryName)
+}
+
+internal fun shouldBackfillBundledSkillMetadata(installedMetadata: SkillSourceMetadata?): Boolean {
+    return installedMetadata == null
+}
+
 internal fun shouldRefreshBundledSkillInstallation(
     bundledSkill: BundledSkill,
     installedMetadata: SkillSourceMetadata?,
     expectedMetadata: SkillSourceMetadata,
 ): Boolean {
-    if (installedMetadata == null) return true
+    if (installedMetadata == null) return false
     if (installedMetadata.sourceType != SkillSourceType.BUNDLED) return false
     if (installedMetadata.sourceId != bundledSkill.directoryName) return false
     return installedMetadata.hash != expectedMetadata.hash
@@ -1584,6 +1632,7 @@ internal fun buildSkillMarkdown(
     body: String,
     extras: SkillFrontmatterExtras = SkillFrontmatterExtras(),
 ): String {
+    require(extras.hasActivationPath()) { "Skill must remain invocable by the user or the model" }
     val resolvedBody = body.trim().ifBlank {
         """
         # Instructions

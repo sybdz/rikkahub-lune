@@ -7,7 +7,9 @@ import me.rerere.ai.ui.UIMessage
 import me.rerere.rikkahub.data.ai.tools.LocalToolOption
 import me.rerere.rikkahub.data.model.Assistant
 
-private val ExplicitSkillMentionRegex = Regex("""(?<![A-Za-z0-9._-])(?:/|@)([A-Za-z0-9._-]+)\b""")
+private val ExplicitSkillMentionRegex = Regex(
+    """(^|[\s(\[{<"'`])(?:/|@)([A-Za-z0-9](?:[A-Za-z0-9._-]*[A-Za-z0-9])?)(?!/[A-Za-z0-9._-])(?!\.[A-Za-z0-9])(?=$|[\s)\]}>."'`,!?;:])"""
+)
 
 internal fun isSkillsRuntimeAvailable(
     assistant: Assistant,
@@ -89,7 +91,7 @@ internal fun resolveExplicitSkillInvocations(
     val entriesByDirectory = availableSkills.associateBy { it.directoryName }
     return ExplicitSkillMentionRegex.findAll(latestUserText)
         .mapNotNull { match ->
-            entriesByDirectory[match.groupValues[1]]
+            entriesByDirectory[match.groupValues[2]]
         }
         .filter { it.userInvocable }
         .distinctBy { it.directoryName }
