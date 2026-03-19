@@ -96,12 +96,21 @@ internal data class SkillToolPolicy(
 
     fun filterVisibleTools(tools: List<Tool>): List<Tool> {
         val allowedToolNames = visibleToolNames ?: return tools
-        return tools.filter { it.name in allowedToolNames }
+        return tools.filter { tool ->
+            tool.name in allowedToolNames ||
+                tool.name in AlwaysAllowedSkillRuntimeToolNames ||
+                (tool.name == "run_skill_script" && canRunSkillScripts())
+        }
     }
 
     fun validate(toolName: String, input: JsonElement): SkillToolPolicyViolation? {
         val allowedToolNames = visibleToolNames
-        if (allowedToolNames != null && toolName !in allowedToolNames) {
+        if (
+            allowedToolNames != null &&
+            toolName !in allowedToolNames &&
+            toolName !in AlwaysAllowedSkillRuntimeToolNames &&
+            !(toolName == "run_skill_script" && canRunSkillScripts())
+        ) {
             return SkillToolPolicyViolation(
                 message = "Tool $toolName is not allowed by the active skills: ${activeSkillDirectoryNames.joinToString(", ")}"
             )
@@ -121,6 +130,10 @@ internal data class SkillToolPolicy(
 
             else -> null
         }
+    }
+
+    private fun canRunSkillScripts(): Boolean {
+        return shellAccess == SkillShellAccess.FULL || shellAccess == SkillShellAccess.UNRESTRICTED
     }
 
     private fun validateTermuxExec(input: JsonElement): SkillToolPolicyViolation? {

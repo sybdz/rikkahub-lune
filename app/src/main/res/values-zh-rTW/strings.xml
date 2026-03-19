@@ -1403,5 +1403,19 @@
   <string name="assistant_page_skills_field_allowed_tools_desc">顯式啟用的技能會在執行時套用這些工具限制。支援示例：Read、Bash、termux_python、get_time_info、clipboard_tool。</string>
   <string name="assistant_page_skills_option_activation_desc">至少要保留一種啟動方式。關閉使用者呼叫後，該技能會變成僅自動呼叫，因此不能同時關閉模型呼叫。</string>
   <string name="assistant_page_skills_chip_manual_only">僅手動呼叫</string>
+  <string name="assistant_page_skills_enable_title">啟用技能</string>
+  <string name="assistant_page_skills_enable_desc">為此助理啟用來自 %1$s 的已選技能。</string>
+  <string name="assistant_page_skills_option_catalog_title">型錄轉換為模型</string>
+  <string name="assistant_page_skills_option_catalog_desc">將選定的可自動喚起技能公開為精簡目錄，以便模型自行決定何時啟用它們。</string>
+  <string name="assistant_page_skills_option_explicit_title">顯式叫用</string>
+  <string name="assistant_page_skills_option_explicit_desc">允許使用者透過 @skill-name 或 /skill-name 呼叫所選技能。</string>
+  <string name="assistant_page_skills_option_script_execution_title">技能腳本執行</string>
+  <string name="assistant_page_skills_option_script_execution_desc">為 scripts/ 底下的封裝腳本啟用 run_skill_script。關閉此選項以將技能維持為唯讀。</string>
+  <string name="assistant_page_skills_import_preview_declared_tools_title">已宣告的工具存取權限</string>
+  <string name="assistant_page_skills_import_preview_declared_tools_line">%1$s: %2$s</string>
+  <string name="assistant_page_skills_meta_tools">工具：%1$s</string>
+  <string name="assistant_page_skills_meta_source_id">來源 ID：%1$s</string>
+  <string name="assistant_page_skills_meta_license">授權條款：%1$s</string>
+  <string name="assistant_page_skills_meta_compatibility">相容性：%1$s</string>
+  <string name="assistant_page_skills_meta_package_hash">套件雜湊：%1$s</string>
 </resources>
-

@@ -716,6 +716,41 @@ class SkillsRepositoryTest {
     }
 
     @Test
+    fun `normalizeSkillResourcePath should normalize nested resource paths`() {
+        assertEquals(
+            "references/guide.md",
+            normalizeSkillResourcePath("references/guide.md"),
+        )
+        assertEquals(
+            "scripts/run.sh",
+            normalizeSkillResourcePath("scripts//run.sh"),
+        )
+    }
+
+    @Test
+    fun `normalizeSkillResourcePath should reject traversal reserved files and absolute paths`() {
+        assertTrue(runCatching { normalizeSkillResourcePath("../guide.md") }.isFailure)
+        assertTrue(runCatching { normalizeSkillResourcePath("/tmp/guide.md") }.isFailure)
+        assertTrue(runCatching { normalizeSkillResourcePath("SKILL.md") }.isFailure)
+        assertTrue(runCatching { normalizeSkillResourcePath(".rikkahub-skill-source.json") }.isFailure)
+    }
+
+    @Test
+    fun `normalizeSkillScriptPath should require scripts directory and supported extensions`() {
+        assertEquals("scripts/run.sh", normalizeSkillScriptPath("scripts/run.sh"))
+        assertEquals("scripts/tool.py", normalizeSkillScriptPath("scripts/tool.py"))
+        assertTrue(runCatching { normalizeSkillScriptPath("references/run.sh") }.isFailure)
+        assertTrue(runCatching { normalizeSkillScriptPath("scripts/run.rb") }.isFailure)
+    }
+
+    @Test
+    fun `normalizeSkillScriptArguments should reject control characters and oversize lists`() {
+        assertEquals(listOf("--check", "demo"), normalizeSkillScriptArguments(listOf("--check", "demo")))
+        assertTrue(runCatching { normalizeSkillScriptArguments(List(32) { "x" }) }.isFailure)
+        assertTrue(runCatching { normalizeSkillScriptArguments(listOf("bad\narg")) }.isFailure)
+    }
+
+    @Test
     fun `assistant skill references should be renamed across all assistants`() {
         val assistants = listOf(
             Assistant(name = "A", selectedSkills = setOf("old-skill", "other")),

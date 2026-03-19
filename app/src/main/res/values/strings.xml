@@ -1409,4 +1409,19 @@
   <string name="assistant_page_skills_chip_manual_only">Manual-only</string>
   <string name="assistant_page_skills_chip_version">v%1$s</string>
   <string name="chat_input_attachment_fallback_file">File</string>
+  <string name="assistant_page_skills_enable_title">Enable skills</string>
+  <string name="assistant_page_skills_enable_desc">Enable selected skills from %1$s for this assistant.</string>
+  <string name="assistant_page_skills_option_catalog_title">Catalog to model</string>
+  <string name="assistant_page_skills_option_catalog_desc">Expose selected auto-invocable skills as a lightweight catalog so the model can decide when to activate them.</string>
+  <string name="assistant_page_skills_option_explicit_title">Explicit invocation</string>
+  <string name="assistant_page_skills_option_explicit_desc">Allow the user to invoke selected skills with @skill-name or /skill-name.</string>
+  <string name="assistant_page_skills_option_script_execution_title">Skill script execution</string>
+  <string name="assistant_page_skills_option_script_execution_desc">Expose run_skill_script for packaged scripts under scripts/. Turn this off to keep skills read-only.</string>
+  <string name="assistant_page_skills_import_preview_declared_tools_title">Declared tool access</string>
+  <string name="assistant_page_skills_import_preview_declared_tools_line">%1$s: %2$s</string>
+  <string name="assistant_page_skills_meta_tools">Tools: %1$s</string>
+  <string name="assistant_page_skills_meta_source_id">Source ID: %1$s</string>
+  <string name="assistant_page_skills_meta_license">License: %1$s</string>
+  <string name="assistant_page_skills_meta_compatibility">Compatibility: %1$s</string>
+  <string name="assistant_page_skills_meta_package_hash">Package hash: %1$s</string>
 </resources>

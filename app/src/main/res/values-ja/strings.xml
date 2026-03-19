@@ -1411,5 +1411,19 @@ mDNSアドレス: .localホスト名を使用し、IPを知らなくても同じ
   <string name="assistant_page_skills_field_allowed_tools_desc">明示的に有効化したスキルは、これらのツール制約を実行時に適用します。対応例: Read, Bash, termux_python, get_time_info, clipboard_tool.</string>
   <string name="assistant_page_skills_option_activation_desc">少なくとも 1 つの有効化経路を残す必要があります。ユーザー呼び出しをオフにするとこのスキルは自動専用になるため、同時にモデル呼び出しもオフにはできません。</string>
   <string name="assistant_page_skills_chip_manual_only">手動のみ</string>
+  <string name="assistant_page_skills_enable_title">スキルを有効にする</string>
+  <string name="assistant_page_skills_enable_desc">このアシスタントで、%1$s から選択したスキルを有効にします。</string>
+  <string name="assistant_page_skills_option_catalog_title">カタログをモデル化</string>
+  <string name="assistant_page_skills_option_catalog_desc">選択した自動呼び出し可能なスキルを軽量なカタログとして公開し、モデルがいつ有効化するかを判断できるようにします。</string>
+  <string name="assistant_page_skills_option_explicit_title">明示的な呼び出し</string>
+  <string name="assistant_page_skills_option_explicit_desc">ユーザーが選択したスキルを @skill-name または /skill-name で呼び出せるようにします。</string>
+  <string name="assistant_page_skills_option_script_execution_title">スキルスクリプトの実行</string>
+  <string name="assistant_page_skills_option_script_execution_desc">scripts/ 配下のパッケージ済みスクリプトに対して run_skill_script を使用できるようにします。スキルを読み取り専用のままにするにはオフにしてください。</string>
+  <string name="assistant_page_skills_import_preview_declared_tools_title">宣言済みツールへのアクセス</string>
+  <string name="assistant_page_skills_import_preview_declared_tools_line">%1$s: %2$s</string>
+  <string name="assistant_page_skills_meta_tools">ツール: %1$s</string>
+  <string name="assistant_page_skills_meta_source_id">ソース ID: %1$s</string>
+  <string name="assistant_page_skills_meta_license">ライセンス: %1$s</string>
+  <string name="assistant_page_skills_meta_compatibility">互換性: %1$s</string>
+  <string name="assistant_page_skills_meta_package_hash">パッケージハッシュ: %1$s</string>
 </resources>
-

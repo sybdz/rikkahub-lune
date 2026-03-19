@@ -201,6 +201,37 @@ private fun SkillImportPreviewCard(entry: SkillImportPreviewEntry) {
                 if (entry.assetFiles > 0) {
                     SkillMetaChip(label = stringResource(R.string.assistant_page_skills_chip_count_assets, entry.assetFiles))
                 }
+                entry.allowedTools?.let { tools ->
+                    SkillMetaChip(label = stringResource(R.string.assistant_page_skills_meta_tools, tools))
+                }
+            }
+            entry.sourceId?.let { sourceId ->
+                Text(
+                    text = stringResource(R.string.assistant_page_skills_meta_source_id, sourceId),
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+            entry.license?.let { license ->
+                Text(
+                    text = stringResource(R.string.assistant_page_skills_meta_license, license),
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+            entry.compatibility?.let { compatibility ->
+                Text(
+                    text = stringResource(R.string.assistant_page_skills_meta_compatibility, compatibility),
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+            entry.packageHash?.let { packageHash ->
+                Text(
+                    text = stringResource(R.string.assistant_page_skills_meta_package_hash, packageHash.take(12)),
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
             }
             if (entry.scriptPaths.isNotEmpty()) {
                 Text(
@@ -275,6 +306,23 @@ private fun SkillEntryCard(
                     } else if (!entry.modelInvocable) {
                         SkillMetaChip(label = stringResource(R.string.assistant_page_skills_chip_manual_only))
                     }
+                    entry.allowedTools?.let { tools ->
+                        SkillMetaChip(label = stringResource(R.string.assistant_page_skills_meta_tools, tools))
+                    }
+                }
+                entry.sourceId?.let { sourceId ->
+                    Text(
+                        text = stringResource(R.string.assistant_page_skills_meta_source_id, sourceId),
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+                entry.sourceUrl?.let {
+                    Text(
+                        text = it,
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
                 }
                 Text(
                     text = entry.path,

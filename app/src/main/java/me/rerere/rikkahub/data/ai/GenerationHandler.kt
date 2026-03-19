@@ -17,6 +17,7 @@ import me.rerere.ai.core.Tool
 import me.rerere.ai.core.merge
 import me.rerere.ai.provider.CustomBody
 import me.rerere.ai.provider.Model
+import me.rerere.ai.provider.ModelAbility
 import me.rerere.ai.provider.Provider
 import me.rerere.ai.provider.ProviderManager
 import me.rerere.ai.provider.ProviderSetting
@@ -40,13 +41,16 @@ import me.rerere.rikkahub.data.datastore.findModelById
 import me.rerere.rikkahub.data.datastore.findProvider
 import me.rerere.rikkahub.data.model.Assistant
 import me.rerere.rikkahub.data.model.AssistantMemory
+import me.rerere.rikkahub.data.skills.SkillCatalogEntry
 import me.rerere.rikkahub.data.skills.SkillsRepository
 import me.rerere.rikkahub.data.skills.SkillToolPolicy
 import me.rerere.rikkahub.data.skills.buildActivatedSkillsPrompt
+import me.rerere.rikkahub.data.skills.buildSkillRuntimeTools
 import me.rerere.rikkahub.data.skills.buildSkillsCatalogPrompt
 import me.rerere.rikkahub.data.skills.resolveExplicitSkillInvocations
 import me.rerere.rikkahub.data.skills.resolveSelectedSkillEntries
 import me.rerere.rikkahub.data.skills.resolveSkillToolPolicy
+import me.rerere.rikkahub.data.skills.shouldInjectSkillsCatalog
 import me.rerere.rikkahub.data.skills.shouldLoadExplicitSkillActivations
 import me.rerere.rikkahub.data.repository.ConversationRepository
 import me.rerere.rikkahub.data.repository.MemoryRepository
@@ -65,6 +69,9 @@ private data class SkillRequestContext(
     val catalogPrompt: String? = null,
     val activatedPrompt: String? = null,
     val toolPolicy: SkillToolPolicy = SkillToolPolicy(),
+    val catalogToolEntries: List<SkillCatalogEntry> = emptyList(),
+    val resourceToolEntries: List<SkillCatalogEntry> = emptyList(),
+    val scriptToolEntries: List<SkillCatalogEntry> = emptyList(),
 )
 
 @Serializable
@@ -108,6 +115,12 @@ class GenerationHandler(
                 model = model,
                 messages = messages,
             )
+            val skillRuntimeTools = buildSkillRuntimeTools(
+                skillsRepository = skillsRepository,
+                catalogEntries = skillRequestContext.catalogToolEntries,
+                resourceEntries = skillRequestContext.resourceToolEntries,
+                scriptEntries = skillRequestContext.scriptToolEntries,
+            )
             val allToolsInternal = buildList {
                 Log.i(TAG, "generateInternal: build tools($assistant)")
                 if (assistant.enableMemory) {
@@ -129,6 +142,7 @@ class GenerationHandler(
                         }
                     ).let(this::addAll)
                 }
+                addAll(skillRuntimeTools)
                 addAll(tools)
             }
             val generationTools = skillRequestContext.toolPolicy.filterVisibleTools(allToolsInternal)
@@ -501,6 +515,7 @@ class GenerationHandler(
             selectedSkills = assistant.selectedSkills,
             availableSkills = skillsCatalog.entries,
         )
+        val modelInvocableEntries = selectedEntries.filter { it.modelInvocable }
         val explicitSkillInvocations = if (shouldLoadExplicitSkillActivations(assistant)) {
             resolveExplicitSkillInvocations(
                 messages = messages,
@@ -514,6 +529,22 @@ class GenerationHandler(
         } else {
             skillsRepository.loadSkillActivations(explicitSkillInvocations.map { it.directoryName })
         }
+        val catalogToolEntries = if (shouldInjectSkillsCatalog(assistant, model)) {
+            modelInvocableEntries
+        } else {
+            emptyList()
+        }
+        val resourceToolEntries = (catalogToolEntries + activations.map { it.entry })
+            .distinctBy { it.directoryName }
+        val scriptToolEntries = if (
+            assistant.skillsEnabled &&
+            assistant.skillsScriptExecutionEnabled &&
+            model.abilities.contains(ModelAbility.TOOL)
+        ) {
+            resourceToolEntries
+        } else {
+            emptyList()
+        }
 
         return SkillRequestContext(
             catalogPrompt = buildSkillsCatalogPrompt(
@@ -523,6 +554,9 @@ class GenerationHandler(
             ),
             activatedPrompt = buildActivatedSkillsPrompt(activations),
             toolPolicy = resolveSkillToolPolicy(activations),
+            catalogToolEntries = catalogToolEntries,
+            resourceToolEntries = resourceToolEntries,
+            scriptToolEntries = scriptToolEntries,
         )
     }
 

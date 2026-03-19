@@ -58,7 +58,6 @@ import me.rerere.hugeicons.stroke.Cancel01
 import me.rerere.hugeicons.stroke.FileImport
 import me.rerere.hugeicons.stroke.Puzzle
 import me.rerere.rikkahub.R
-import me.rerere.rikkahub.data.ai.tools.LocalToolOption
 import me.rerere.rikkahub.data.model.Assistant
 import me.rerere.rikkahub.data.skills.SkillCatalogEntry
 import me.rerere.rikkahub.data.skills.SkillEditorDocument
@@ -182,7 +181,6 @@ fun SkillsPicker(
     val scope = rememberCoroutineScope()
     val toaster = LocalToaster.current
     val skillsRepository = koinInject<SkillsRepository>()
-    val termuxToolEnabled = assistant.localTools.contains(LocalToolOption.TermuxExec)
     val missingSelections = remember(assistant.selectedSkills, skillsState.entryNames) {
         assistant.selectedSkills
             .filterNot { it in skillsState.entryNames }
@@ -296,12 +294,12 @@ fun SkillsPicker(
                             verticalArrangement = Arrangement.spacedBy(4.dp),
                         ) {
                             Text(
-                                text = stringResource(R.string.assistant_page_skills_enable_catalog_title),
+                                text = stringResource(R.string.assistant_page_skills_enable_title),
                                 style = MaterialTheme.typography.titleMedium,
                             )
                             Text(
                                 text = stringResource(
-                                    R.string.assistant_page_skills_enable_catalog_desc,
+                                    R.string.assistant_page_skills_enable_desc,
                                     resolvedRootPath,
                                 ),
                                 style = MaterialTheme.typography.bodySmall,
@@ -314,6 +312,98 @@ fun SkillsPicker(
                                 onUpdateAssistant(assistant.copy(skillsEnabled = it))
                             },
                         )
+                    }
+
+                    if (assistant.skillsEnabled) {
+                        Card {
+                            Column(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(horizontal = 16.dp, vertical = 12.dp),
+                                verticalArrangement = Arrangement.spacedBy(12.dp),
+                            ) {
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                                ) {
+                                    Column(
+                                        modifier = Modifier.weight(1f),
+                                        verticalArrangement = Arrangement.spacedBy(4.dp),
+                                    ) {
+                                        Text(
+                                            text = stringResource(R.string.assistant_page_skills_option_catalog_title),
+                                            style = MaterialTheme.typography.titleSmall,
+                                        )
+                                        Text(
+                                            text = stringResource(R.string.assistant_page_skills_option_catalog_desc),
+                                            style = MaterialTheme.typography.bodySmall,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        )
+                                    }
+                                    Switch(
+                                        checked = assistant.skillsCatalogEnabled,
+                                        onCheckedChange = {
+                                            onUpdateAssistant(assistant.copy(skillsCatalogEnabled = it))
+                                        },
+                                    )
+                                }
+
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                                ) {
+                                    Column(
+                                        modifier = Modifier.weight(1f),
+                                        verticalArrangement = Arrangement.spacedBy(4.dp),
+                                    ) {
+                                        Text(
+                                            text = stringResource(R.string.assistant_page_skills_option_explicit_title),
+                                            style = MaterialTheme.typography.titleSmall,
+                                        )
+                                        Text(
+                                            text = stringResource(R.string.assistant_page_skills_option_explicit_desc),
+                                            style = MaterialTheme.typography.bodySmall,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        )
+                                    }
+                                    Switch(
+                                        checked = assistant.skillsExplicitInvocationEnabled,
+                                        onCheckedChange = {
+                                            onUpdateAssistant(assistant.copy(skillsExplicitInvocationEnabled = it))
+                                        },
+                                    )
+                                }
+
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                                ) {
+                                    Column(
+                                        modifier = Modifier.weight(1f),
+                                        verticalArrangement = Arrangement.spacedBy(4.dp),
+                                    ) {
+                                        Text(
+                                            text = stringResource(R.string.assistant_page_skills_option_script_execution_title),
+                                            style = MaterialTheme.typography.titleSmall,
+                                        )
+                                        Text(
+                                            text = stringResource(R.string.assistant_page_skills_option_script_execution_desc),
+                                            style = MaterialTheme.typography.bodySmall,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        )
+                                    }
+                                    Switch(
+                                        checked = assistant.skillsScriptExecutionEnabled,
+                                        onCheckedChange = {
+                                            onUpdateAssistant(assistant.copy(skillsScriptExecutionEnabled = it))
+                                        },
+                                    )
+                                }
+                            }
+                        }
                     }
 
                     Text(
@@ -401,16 +491,6 @@ fun SkillsPicker(
                         }
                     }
                 }
-            }
-        }
-
-        if (!termuxToolEnabled) {
-            item("termux-warning") {
-                SkillsInfoCard(
-                    title = stringResource(R.string.assistant_page_skills_termux_required_title),
-                    text = stringResource(R.string.assistant_page_skills_termux_required_desc),
-                    isError = true,
-                )
             }
         }
 
@@ -815,6 +895,16 @@ fun SkillsPicker(
                     verticalArrangement = Arrangement.spacedBy(12.dp),
                 ) {
                     val preview = currentImport.preview
+                    val declaredToolAccess = preview.entries
+                        .mapNotNull { entry ->
+                            entry.allowedTools?.takeIf { it.isNotBlank() }?.let { tools ->
+                                resources.getString(
+                                    R.string.assistant_page_skills_import_preview_declared_tools_line,
+                                    entry.directoryName,
+                                    tools,
+                                )
+                            }
+                        }
                     Text(
                         text = stringResource(
                             R.string.assistant_page_skills_import_preview_summary,
@@ -828,6 +918,13 @@ fun SkillsPicker(
                         SkillsInfoCard(
                             title = stringResource(R.string.assistant_page_skills_import_preview_review_title),
                             text = stringResource(R.string.assistant_page_skills_import_preview_review_desc),
+                            isError = false,
+                        )
+                    }
+                    if (declaredToolAccess.isNotEmpty()) {
+                        SkillsInfoCard(
+                            title = stringResource(R.string.assistant_page_skills_import_preview_declared_tools_title),
+                            text = declaredToolAccess.joinToString(separator = "\n"),
                             isError = false,
                         )
                     }

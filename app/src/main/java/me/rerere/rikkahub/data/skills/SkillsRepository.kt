@@ -5,6 +5,8 @@ import android.util.Log
 import java.io.BufferedInputStream
 import java.io.ByteArrayOutputStream
 import java.io.InputStream
+import java.nio.ByteBuffer
+import java.nio.charset.CodingErrorAction
 import java.security.MessageDigest
 import java.util.Base64
 import java.util.UUID
@@ -54,6 +56,10 @@ private const val SKILL_ARCHIVE_MAX_DEPTH = 8
 private const val SKILL_RESOURCE_LIST_LIMIT = 128
 private const val SKILL_IMPORT_PREVIEW_SCRIPT_LIST_LIMIT = 8
 private const val SKILL_SOURCE_METADATA_SCHEMA_VERSION = 1
+internal const val SKILL_RESOURCE_DEFAULT_READ_CHAR_LIMIT = 12_000
+internal const val SKILL_RESOURCE_MAX_READ_CHAR_LIMIT = 48_000
+private const val SKILL_SCRIPT_MAX_ARGS = 24
+private const val SKILL_SCRIPT_MAX_ARG_CHARS = 512
 
 @Serializable
 enum class SkillSourceType {
@@ -107,6 +113,9 @@ data class SkillImportPreviewEntry(
     val sourceId: String? = null,
     val version: String? = null,
     val author: String? = null,
+    val license: String? = null,
+    val compatibility: String? = null,
+    val allowedTools: String? = null,
     val packageHash: String? = null,
     val scriptFiles: Int = 0,
     val referenceFiles: Int = 0,
@@ -129,6 +138,25 @@ data class SkillActivationEntry(
     val entry: SkillCatalogEntry,
     val markdown: String,
     val resourceFiles: List<String>,
+)
+
+data class SkillResourceReadResult(
+    val entry: SkillCatalogEntry,
+    val relativePath: String,
+    val content: String,
+    val truncated: Boolean,
+    val totalBytes: Int,
+)
+
+data class SkillScriptRunResult(
+    val entry: SkillCatalogEntry,
+    val relativePath: String,
+    val interpreter: String,
+    val stdout: String,
+    val stderr: String,
+    val exitCode: Int?,
+    val timedOut: Boolean,
+    val errMsg: String?,
 )
 
 data class SkillInvalidEntry(
@@ -239,6 +267,12 @@ internal data class SkillImportPlan(
 internal data class SkillImportPreviewData(
     val plan: SkillImportPlan,
     val preview: SkillImportPreview,
+)
+
+private data class SkillFileReadResult(
+    val bytes: ByteArray,
+    val truncated: Boolean,
+    val totalBytes: Int,
 )
 
 internal data class BundledSkill(
@@ -648,28 +682,108 @@ class SkillsRepository(
         removeSelectedSkillDirectoryAcrossAssistants(safeDirectoryName)
     }
 
-    suspend fun loadSkillActivations(directoryNames: Collection<String>): List<SkillActivationEntry> {
-        if (directoryNames.isEmpty()) return emptyList()
+    suspend fun loadSkillActivation(entry: SkillCatalogEntry): SkillActivationEntry {
         return withContext(Dispatchers.IO) {
             val settings = settingsStore.settingsFlow.value
             require(!settings.init) { "Settings are not ready" }
-            val entriesByDirectory = state.value.entries.associateBy { it.directoryName }
-            directoryNames.distinct()
-                .mapNotNull { directoryName -> entriesByDirectory[directoryName] }
-                .map { entry ->
-                    SkillActivationEntry(
-                        entry = entry,
-                        markdown = readSkillFile(
-                            directoryPath = entry.path,
-                            workdir = settings.termuxWorkdir,
-                        ),
-                        resourceFiles = listSkillResourceFiles(
-                            directoryPath = entry.path,
-                            workdir = settings.termuxWorkdir,
-                        ),
-                    )
-                }
+            SkillActivationEntry(
+                entry = entry,
+                markdown = readSkillFile(
+                    directoryPath = entry.path,
+                    workdir = settings.termuxWorkdir,
+                ),
+                resourceFiles = listSkillResourceFiles(
+                    directoryPath = entry.path,
+                    workdir = settings.termuxWorkdir,
+                ),
+            )
         }
+    }
+
+    suspend fun loadSkillActivations(directoryNames: Collection<String>): List<SkillActivationEntry> {
+        if (directoryNames.isEmpty()) return emptyList()
+        return withContext(Dispatchers.IO) {
+            val entriesByDirectory = state.value.entries.associateBy { it.directoryName }
+            buildList {
+                directoryNames.distinct()
+                    .mapNotNull { directoryName -> entriesByDirectory[directoryName] }
+                    .forEach { entry ->
+                        add(loadSkillActivation(entry))
+                    }
+            }
+        }
+    }
+
+    suspend fun readSkillResource(
+        entry: SkillCatalogEntry,
+        relativePath: String,
+        maxChars: Int = SKILL_RESOURCE_DEFAULT_READ_CHAR_LIMIT,
+    ): SkillResourceReadResult {
+        val normalizedPath = normalizeSkillResourcePath(relativePath)
+        val safeMaxChars = maxChars.coerceIn(1, SKILL_RESOURCE_MAX_READ_CHAR_LIMIT)
+        val maxBytes = safeMaxChars * 4
+        return withContext(Dispatchers.IO) {
+            val settings = settingsStore.settingsFlow.value
+            require(!settings.init) { "Settings are not ready" }
+            val file = readRelativeSkillFile(
+                directoryPath = entry.path,
+                relativePath = normalizedPath,
+                workdir = settings.termuxWorkdir,
+                maxBytes = maxBytes,
+            )
+            val content = decodeSkillTextResource(file.bytes)
+            SkillResourceReadResult(
+                entry = entry,
+                relativePath = normalizedPath,
+                content = if (content.length <= safeMaxChars) content else content.take(safeMaxChars),
+                truncated = file.truncated || content.length > safeMaxChars,
+                totalBytes = file.totalBytes,
+            )
+        }
+    }
+
+    suspend fun runSkillEntryScript(
+        entry: SkillCatalogEntry,
+        relativePath: String,
+        args: List<String> = emptyList(),
+        timeoutMs: Long = SKILL_COMMAND_TIMEOUT_MS,
+    ): SkillScriptRunResult {
+        val normalizedPath = normalizeSkillScriptPath(relativePath)
+        val normalizedArgs = normalizeSkillScriptArguments(args)
+        val interpreter = resolveSkillScriptInterpreter(normalizedPath)
+        val result = withContext(Dispatchers.IO) {
+            val settings = settingsStore.settingsFlow.value
+            require(!settings.init) { "Settings are not ready" }
+            termuxCommandManager.run(
+                TermuxRunCommandRequest(
+                    commandPath = TERMUX_BASH_PATH,
+                    arguments = listOf(
+                        "-lc",
+                        buildRunSkillEntryScriptWrapper(),
+                        "_",
+                        entry.path,
+                        normalizedPath,
+                        interpreter,
+                    ) + normalizedArgs,
+                    workdir = entry.path,
+                    background = true,
+                    timeoutMs = timeoutMs.coerceAtLeast(1_000L),
+                    label = "RikkaHub run skill script",
+                    description = "Run a selected skill script inside its package root",
+                )
+            )
+        }
+
+        return SkillScriptRunResult(
+            entry = entry,
+            relativePath = normalizedPath,
+            interpreter = interpreter,
+            stdout = result.stdout,
+            stderr = result.stderr,
+            exitCode = result.exitCode,
+            timedOut = result.timedOut,
+            errMsg = result.errMsg,
+        )
     }
 
     private suspend fun refreshLocked(workdir: String) {
@@ -891,6 +1005,38 @@ class SkillsRepository(
             label = label,
         )
         return result.stdout.takeIf { it.isNotEmpty() }
+    }
+
+    private suspend fun readRelativeSkillFile(
+        directoryPath: String,
+        relativePath: String,
+        workdir: String,
+        maxBytes: Int,
+    ): SkillFileReadResult {
+        val result = runSkillScript(
+            script = buildReadRelativeSkillFileScript(
+                directoryPath = directoryPath,
+                relativePath = relativePath,
+                maxBytes = maxBytes,
+            ),
+            workdir = workdir,
+            label = "RikkaHub read skill resource",
+        )
+        val parts = result.stdout.trimEnd().split('\t', limit = 2)
+        require(parts.isNotEmpty()) { "Failed to parse skill resource response" }
+        val totalBytes = parts.first().trim().toIntOrNull()
+            ?: error("Failed to parse skill resource size")
+        val encodedBytes = parts.getOrNull(1).orEmpty()
+        val bytes = if (encodedBytes.isBlank()) {
+            ByteArray(0)
+        } else {
+            Base64.getDecoder().decode(encodedBytes)
+        }
+        return SkillFileReadResult(
+            bytes = bytes,
+            truncated = totalBytes > maxBytes,
+            totalBytes = totalBytes,
+        )
     }
 
     private suspend fun readSkillSourceMetadata(
@@ -1388,6 +1534,72 @@ class SkillsRepository(
         """.trimIndent()
     }
 
+    private fun buildReadRelativeSkillFileScript(
+        directoryPath: String,
+        relativePath: String,
+        maxBytes: Int,
+    ): String {
+        val safeDirectory = directoryPath.escapeForSingleQuotedShell()
+        val safeRelativePath = relativePath.escapeForSingleQuotedShell()
+        return """
+            set -eu
+            DIR='$safeDirectory'
+            REL='$safeRelativePath'
+            MAX_BYTES=$maxBytes
+            [ -d "${'$'}DIR" ] || exit 1
+            CANON_DIR="${'$'}(cd "${'$'}DIR" && pwd -P)"
+            TARGET="${'$'}DIR/${'$'}REL"
+            [ -f "${'$'}TARGET" ] || exit 1
+            CANON_TARGET="${'$'}(realpath "${'$'}TARGET")"
+            case "${'$'}CANON_TARGET" in
+              "${'$'}CANON_DIR"/*) ;;
+              *) exit 1 ;;
+            esac
+            TOTAL_BYTES="${'$'}(wc -c < "${'$'}CANON_TARGET" | tr -d '[:space:]')"
+            printf '%s\t' "${'$'}TOTAL_BYTES"
+            if [ "${'$'}TOTAL_BYTES" -gt "${'$'}MAX_BYTES" ]; then
+              head -c "${'$'}MAX_BYTES" "${'$'}CANON_TARGET" | base64 | tr -d '\n'
+            else
+              base64 "${'$'}CANON_TARGET" | tr -d '\n'
+            fi
+            printf '\n'
+        """.trimIndent()
+    }
+
+    private fun buildRunSkillEntryScriptWrapper(): String {
+        return """
+            set -eu
+            DIR="${'$'}1"
+            REL="${'$'}2"
+            INTERPRETER="${'$'}3"
+            shift 3
+            [ -d "${'$'}DIR" ] || exit 1
+            CANON_DIR="${'$'}(cd "${'$'}DIR" && pwd -P)"
+            TARGET="${'$'}DIR/${'$'}REL"
+            [ -f "${'$'}TARGET" ] || exit 1
+            CANON_TARGET="${'$'}(realpath "${'$'}TARGET")"
+            case "${'$'}CANON_TARGET" in
+              "${'$'}CANON_DIR"/*) ;;
+              *)
+                printf '%s\n' "Script path escapes the skill directory" >&2
+                exit 1
+                ;;
+            esac
+            case "${'$'}INTERPRETER" in
+              bash)
+                exec "$TERMUX_BASH_PATH" "${'$'}CANON_TARGET" "${'$'}@"
+                ;;
+              python)
+                exec /data/data/com.termux/files/usr/bin/python3 "${'$'}CANON_TARGET" "${'$'}@"
+                ;;
+              *)
+                printf '%s\n' "Unsupported skill script interpreter: ${'$'}INTERPRETER" >&2
+                exit 1
+                ;;
+            esac
+        """.trimIndent()
+    }
+
     private fun buildListSkillResourceFilesScript(directoryPath: String): String {
         val safeDirectory = directoryPath.escapeForSingleQuotedShell()
         return """
@@ -1665,6 +1877,22 @@ private fun decodeSkillDiscoveryField(encodedValue: String): String {
     return String(Base64.getDecoder().decode(encodedValue), Charsets.UTF_8)
 }
 
+private fun decodeSkillTextResource(bytes: ByteArray): String {
+    for (endIndex in bytes.size downTo 0) {
+        val decoder = Charsets.UTF_8.newDecoder()
+            .onMalformedInput(CodingErrorAction.REPORT)
+            .onUnmappableCharacter(CodingErrorAction.REPORT)
+        val chunk = if (endIndex == bytes.size) bytes else bytes.copyOf(endIndex)
+        val decoded = runCatching {
+            decoder.decode(ByteBuffer.wrap(chunk)).toString()
+        }.getOrNull()
+        if (decoded != null) {
+            return decoded
+        }
+    }
+    error("Skill resource is not valid UTF-8 text")
+}
+
 private val skillSourceMetadataJson = Json {
     ignoreUnknownKeys = true
     encodeDefaults = false
@@ -1753,6 +1981,70 @@ internal fun requireTopLevelSkillDirectoryName(
     require(directoryName != "." && directoryName != "..") { "$argumentName must not escape the skills root" }
     require(directoryName.none { it.code < 0x20 || it == '\u007f' }) { "$argumentName contains invalid characters" }
     return directoryName
+}
+
+internal fun normalizeSkillResourcePath(
+    relativePath: String,
+    argumentName: String = "Skill resource path",
+): String {
+    require(relativePath.isNotBlank()) { "$argumentName cannot be empty" }
+    require(!relativePath.startsWith('/')) { "$argumentName must be relative" }
+    require(!relativePath.contains('\\')) { "$argumentName must use forward slashes" }
+    require(!Regex("^[A-Za-z]:").containsMatchIn(relativePath)) { "$argumentName must be relative" }
+    require(relativePath.none { it.code < 0x20 || it == '\u007f' }) { "$argumentName contains invalid characters" }
+
+    val segments = relativePath.split('/')
+        .filter { it.isNotEmpty() }
+    require(segments.isNotEmpty()) { "$argumentName cannot be empty" }
+    require(segments.none { it == "." || it == ".." }) { "$argumentName must stay inside the skill directory" }
+
+    val normalized = segments.joinToString("/")
+    require(normalized != SKILL_PACKAGE_FILE_NAME) { "$argumentName must not reference $SKILL_PACKAGE_FILE_NAME" }
+    require(normalized != SKILL_SOURCE_METADATA_FILE_NAME) {
+        "$argumentName must not reference $SKILL_SOURCE_METADATA_FILE_NAME"
+    }
+    return normalized
+}
+
+internal fun normalizeSkillScriptPath(
+    relativePath: String,
+    argumentName: String = "Skill script path",
+): String {
+    val normalized = normalizeSkillResourcePath(
+        relativePath = relativePath,
+        argumentName = argumentName,
+    )
+    require(normalized.startsWith("scripts/")) { "$argumentName must live under scripts/" }
+    require(
+        normalized.endsWith(".sh") || normalized.endsWith(".py")
+    ) { "$argumentName must be a .sh or .py script" }
+    return normalized
+}
+
+internal fun normalizeSkillScriptArguments(
+    args: List<String>,
+    argumentName: String = "Skill script arguments",
+): List<String> {
+    require(args.size <= SKILL_SCRIPT_MAX_ARGS) {
+        "$argumentName cannot exceed $SKILL_SCRIPT_MAX_ARGS items"
+    }
+    return args.mapIndexed { index, arg ->
+        require(arg.length <= SKILL_SCRIPT_MAX_ARG_CHARS) {
+            "$argumentName[$index] exceeds $SKILL_SCRIPT_MAX_ARG_CHARS characters"
+        }
+        require(arg.none { it.code < 0x20 || it == '\u007f' }) {
+            "$argumentName[$index] contains invalid characters"
+        }
+        arg
+    }
+}
+
+internal fun resolveSkillScriptInterpreter(relativePath: String): String {
+    return when {
+        relativePath.endsWith(".sh") -> "bash"
+        relativePath.endsWith(".py") -> "python"
+        else -> error("Unsupported skill script interpreter")
+    }
 }
 
 internal fun isCanonicalBundledMetadata(
@@ -2317,6 +2609,9 @@ internal fun buildSkillImportPreview(
             ),
             version = frontmatter.version,
             author = frontmatter.author,
+            license = frontmatter.license,
+            compatibility = frontmatter.compatibility,
+            allowedTools = frontmatter.allowedTools,
             packageHash = computeSkillPackageHash(filesForSkill),
             scriptFiles = filesForSkill.count { it.path.startsWith("$directoryName/scripts/") },
             referenceFiles = filesForSkill.count { it.path.startsWith("$directoryName/references/") },

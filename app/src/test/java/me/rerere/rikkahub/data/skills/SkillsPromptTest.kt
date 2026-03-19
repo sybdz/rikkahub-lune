@@ -3,7 +3,6 @@ package me.rerere.rikkahub.data.skills
 import me.rerere.ai.provider.Model
 import me.rerere.ai.provider.ModelAbility
 import me.rerere.ai.ui.UIMessage
-import me.rerere.rikkahub.data.ai.tools.LocalToolOption
 import me.rerere.rikkahub.data.model.Assistant
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -101,7 +100,6 @@ class SkillsPromptTest {
         val assistant = Assistant(
             skillsEnabled = true,
             selectedSkills = setOf("find-hugeicons", "missing-skill"),
-            localTools = listOf(LocalToolOption.TimeInfo, LocalToolOption.TermuxExec),
         )
         val model = Model(abilities = listOf(ModelAbility.TOOL))
         val catalog = SkillsCatalogState(
@@ -135,12 +133,15 @@ class SkillsPromptTest {
         )
 
         assertNotNull(prompt)
-        assertTrue(prompt!!.contains("Skills root: /data/data/com.termux/files/home/skills"))
+        assertTrue(prompt!!.contains("Use `activate_skill` to load a selected skill's SKILL.md"))
+        assertTrue(prompt.contains("Use `read_skill_resource`"))
+        assertTrue(prompt.contains("Use `run_skill_script`"))
         assertTrue(prompt.contains("find-hugeicons"))
         assertTrue(prompt.contains("Search the HugeIcons library before using an icon."))
         assertTrue(prompt.contains("source: bundled"))
         assertTrue(prompt.contains("allowed-tools: Read"))
         assertTrue(prompt.contains("invocation: user=true model=true"))
+        assertFalse(prompt.contains("/data/data/com.termux/files/home/skills/find-hugeicons"))
         assertFalse(prompt.contains("locale-tui-localization"))
         assertFalse(prompt.contains("missing-skill"))
     }
@@ -150,7 +151,6 @@ class SkillsPromptTest {
         val assistant = Assistant(
             skillsEnabled = true,
             selectedSkills = setOf("auto-skill", "manual-only"),
-            localTools = listOf(LocalToolOption.TermuxExec),
         )
         val model = Model(abilities = listOf(ModelAbility.TOOL))
         val catalog = SkillsCatalogState(
@@ -186,11 +186,60 @@ class SkillsPromptTest {
     }
 
     @Test
+    fun `buildSkillsCatalogPrompt should stay disabled when catalog exposure is off`() {
+        val assistant = Assistant(
+            skillsEnabled = true,
+            skillsCatalogEnabled = false,
+            selectedSkills = setOf("auto-skill"),
+        )
+        val model = Model(abilities = listOf(ModelAbility.TOOL))
+        val catalog = SkillsCatalogState(
+            entries = listOf(
+                SkillCatalogEntry(
+                    directoryName = "auto-skill",
+                    path = "/skills/auto-skill",
+                    name = "Auto Skill",
+                    description = "Can be auto-invoked.",
+                    modelInvocable = true,
+                )
+            ),
+        )
+
+        assertNull(buildSkillsCatalogPrompt(assistant = assistant, model = model, catalog = catalog))
+        assertFalse(shouldInjectSkillsCatalog(assistant = assistant, model = model))
+    }
+
+    @Test
+    fun `buildSkillsCatalogPrompt should omit script hint when script execution is disabled`() {
+        val assistant = Assistant(
+            skillsEnabled = true,
+            skillsScriptExecutionEnabled = false,
+            selectedSkills = setOf("auto-skill"),
+        )
+        val model = Model(abilities = listOf(ModelAbility.TOOL))
+        val catalog = SkillsCatalogState(
+            entries = listOf(
+                SkillCatalogEntry(
+                    directoryName = "auto-skill",
+                    path = "/skills/auto-skill",
+                    name = "Auto Skill",
+                    description = "Can be auto-invoked.",
+                    modelInvocable = true,
+                )
+            ),
+        )
+
+        val prompt = buildSkillsCatalogPrompt(assistant = assistant, model = model, catalog = catalog)
+
+        assertNotNull(prompt)
+        assertFalse(prompt!!.contains("run_skill_script"))
+    }
+
+    @Test
     fun `buildSkillsCatalogPrompt should be disabled when model cannot use tools`() {
         val assistant = Assistant(
             skillsEnabled = true,
             selectedSkills = setOf("find-hugeicons"),
-            localTools = listOf(LocalToolOption.TermuxExec),
         )
         val model = Model(abilities = emptyList())
         val catalog = SkillsCatalogState(
@@ -210,23 +259,30 @@ class SkillsPromptTest {
     }
 
     @Test
-    fun `isSkillsRuntimeAvailable should require termux and a tool capable model`() {
+    fun `isSkillsRuntimeAvailable should only require selected skills and a tool capable model`() {
         val assistant = Assistant(
             skillsEnabled = true,
             selectedSkills = setOf("find-hugeicons"),
-            localTools = listOf(LocalToolOption.TimeInfo),
         )
 
-        assertFalse(isSkillsRuntimeAvailable(assistant = assistant, modelSupportsTools = true))
         assertFalse(
             isSkillsRuntimeAvailable(
-                assistant = assistant.copy(localTools = listOf(LocalToolOption.TermuxExec)),
+                assistant = assistant,
                 modelSupportsTools = false,
             )
         )
         assertTrue(
             isSkillsRuntimeAvailable(
-                assistant = assistant.copy(localTools = listOf(LocalToolOption.TermuxExec)),
+                assistant = assistant,
+                modelSupportsTools = true,
+            )
+        )
+        assertFalse(
+            isSkillsRuntimeAvailable(
+                assistant = assistant.copy(
+                    skillsCatalogEnabled = false,
+                    skillsScriptExecutionEnabled = false,
+                ),
                 modelSupportsTools = true,
             )
         )
@@ -237,10 +293,20 @@ class SkillsPromptTest {
         val assistant = Assistant(
             skillsEnabled = true,
             selectedSkills = setOf("manual-only"),
-            localTools = listOf(LocalToolOption.TimeInfo),
         )
 
         assertTrue(shouldLoadExplicitSkillActivations(assistant))
+    }
+
+    @Test
+    fun `shouldLoadExplicitSkillActivations should respect assistant explicit toggle`() {
+        val assistant = Assistant(
+            skillsEnabled = true,
+            skillsExplicitInvocationEnabled = false,
+            selectedSkills = setOf("manual-only"),
+        )
+
+        assertFalse(shouldLoadExplicitSkillActivations(assistant))
     }
 
     @Test

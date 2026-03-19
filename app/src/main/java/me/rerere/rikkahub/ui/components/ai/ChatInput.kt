@@ -459,6 +459,7 @@ private fun TextInputRow(
     }
     val invocableSkills = remember(
         assistant.skillsEnabled,
+        assistant.skillsExplicitInvocationEnabled,
         assistant.selectedSkills,
         skillsState.entries,
     ) {

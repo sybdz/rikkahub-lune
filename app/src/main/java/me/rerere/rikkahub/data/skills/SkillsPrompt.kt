@@ -4,7 +4,6 @@ import me.rerere.ai.core.MessageRole
 import me.rerere.ai.provider.Model
 import me.rerere.ai.provider.ModelAbility
 import me.rerere.ai.ui.UIMessage
-import me.rerere.rikkahub.data.ai.tools.LocalToolOption
 import me.rerere.rikkahub.data.model.Assistant
 
 private val ExplicitSkillMentionRegex = Regex(
@@ -19,7 +18,7 @@ internal fun isSkillsRuntimeAvailable(
 ): Boolean {
     return assistant.skillsEnabled &&
         assistant.selectedSkills.isNotEmpty() &&
-        assistant.localTools.contains(LocalToolOption.TermuxExec) &&
+        (assistant.skillsCatalogEnabled || assistant.skillsScriptExecutionEnabled) &&
         modelSupportsTools
 }
 
@@ -36,16 +35,18 @@ internal fun shouldInjectSkillsCatalog(
     assistant: Assistant,
     model: Model,
 ): Boolean {
-    return isSkillsRuntimeAvailable(
-        assistant = assistant,
-        modelSupportsTools = model.abilities.contains(ModelAbility.TOOL),
-    )
+    return assistant.skillsEnabled &&
+        assistant.skillsCatalogEnabled &&
+        assistant.selectedSkills.isNotEmpty() &&
+        model.abilities.contains(ModelAbility.TOOL)
 }
 
 internal fun shouldLoadExplicitSkillActivations(
     assistant: Assistant,
 ): Boolean {
-    return assistant.skillsEnabled && assistant.selectedSkills.isNotEmpty()
+    return assistant.skillsEnabled &&
+        assistant.skillsExplicitInvocationEnabled &&
+        assistant.selectedSkills.isNotEmpty()
 }
 
 internal fun buildSkillsCatalogPrompt(
@@ -54,7 +55,6 @@ internal fun buildSkillsCatalogPrompt(
     catalog: SkillsCatalogState,
 ): String? {
     if (!shouldInjectSkillsCatalog(assistant, model)) return null
-    if (catalog.rootPath.isBlank()) return null
 
     val selectedEntries = resolveSelectedSkillEntries(
         selectedSkills = assistant.selectedSkills,
@@ -64,13 +64,15 @@ internal fun buildSkillsCatalogPrompt(
     if (selectedEntries.isEmpty()) return null
 
     return buildString {
-        appendLine("Local skills are available in the Termux workdir.")
-        appendLine("Skills root: ${catalog.rootPath}")
-        appendLine("Each skill is a directory package. Only inspect a skill when it is relevant to the user's request.")
-        appendLine("Do not read every SKILL.md preemptively.")
-        appendLine("If the user explicitly invokes a selected skill with `@skill-name`, activate it immediately for this request.")
+        appendLine("Selected local skills are available for this assistant.")
+        appendLine("Use `activate_skill` to load a selected skill's SKILL.md only when it is relevant.")
+        appendLine("Use `read_skill_resource` when you need the contents of one listed resource file from an activated skill.")
+        if (assistant.skillsScriptExecutionEnabled) {
+            appendLine("Use `run_skill_script` only for scripts inside the selected skill package when a skill explicitly requires it.")
+        }
+        appendLine("Do not activate every skill preemptively.")
+        appendLine("If the user explicitly invokes a selected skill with `@skill-name`, treat it as already activated for this request.")
         appendLine("`/skill-name` is also supported when it does not look like a filesystem path.")
-        appendLine("When a skill is relevant, use the existing Termux tools to inspect files such as SKILL.md or run scripts inside that skill directory.")
         appendLine()
         appendLine("Available skills:")
         selectedEntries.forEach { skill ->
@@ -84,7 +86,6 @@ internal fun buildSkillsCatalogPrompt(
             skill.allowedTools?.let { appendLine("  allowed-tools: $it") }
             skill.compatibility?.let { appendLine("  compatibility: $it") }
             appendLine("  invocation: user=${skill.userInvocable} model=${skill.modelInvocable}")
-            appendLine("  path: ${skill.path}")
         }
     }.trim()
 }
@@ -122,6 +123,7 @@ internal fun buildActivatedSkillsPrompt(
     return buildString {
         appendLine("The following local skills were explicitly activated for this request.")
         appendLine("Treat their SKILL.md instructions as active guidance for this response.")
+        appendLine("Use `read_skill_resource` when you need the contents of one of their listed resource files.")
         if (activations.any { !it.entry.allowedTools.isNullOrBlank() }) {
             appendLine("Honor each activated skill's allowed-tools field as an enforced runtime policy for this request.")
         }
@@ -155,7 +157,7 @@ internal fun buildActivatedSkillsPrompt(
 
 private fun String.escapeForXmlCdata(): String = replace("]]>", "]]]]><![CDATA[>")
 
-private fun String.truncateForSkillPrompt(): String {
+internal fun String.truncateForSkillPrompt(): String {
     if (length <= ACTIVATED_SKILL_MARKDOWN_CHAR_LIMIT) return this
     return take(ACTIVATED_SKILL_MARKDOWN_CHAR_LIMIT)
         .trimEnd() + "\n\n[truncated]"

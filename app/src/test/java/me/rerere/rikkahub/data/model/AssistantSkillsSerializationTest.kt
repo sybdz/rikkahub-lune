@@ -21,6 +21,9 @@ class AssistantSkillsSerializationTest {
         assertEquals("Legacy Assistant", assistant.name)
         assertFalse(assistant.termuxNeedsApproval)
         assertFalse(assistant.skillsEnabled)
+        assertTrue(assistant.skillsCatalogEnabled)
+        assertTrue(assistant.skillsExplicitInvocationEnabled)
+        assertTrue(assistant.skillsScriptExecutionEnabled)
         assertTrue(assistant.selectedSkills.isEmpty())
     }
 }

@@ -56,16 +56,29 @@ class SkillRuntimePolicyTest {
         val visibleTools = policy.filterVisibleTools(
             listOf(
                 stubTool("termux_exec"),
+                stubTool("activate_skill"),
                 stubTool("get_time_info"),
                 stubTool("clipboard_tool"),
             )
         )
 
-        assertEquals(listOf("get_time_info"), visibleTools.map { it.name })
+        assertEquals(listOf("activate_skill", "get_time_info"), visibleTools.map { it.name })
         assertTrue(
             policy.validate(
                 toolName = "termux_exec",
                 input = buildJsonObject { put("command", JsonPrimitive("pwd")) },
+            ) != null
+        )
+        assertNull(
+            policy.validate(
+                toolName = "activate_skill",
+                input = buildJsonObject { put("skill", JsonPrimitive("demo")) },
+            )
+        )
+        assertTrue(
+            policy.validate(
+                toolName = "run_skill_script",
+                input = buildJsonObject { put("script_path", JsonPrimitive("scripts/run.sh")) },
             ) != null
         )
     }
@@ -151,6 +164,28 @@ class SkillRuntimePolicyTest {
                 toolName = "write_stdin",
                 input = buildJsonObject { put("session_id", JsonPrimitive("42")) },
             ) != null
+        )
+        assertTrue(
+            policy.validate(
+                toolName = "run_skill_script",
+                input = buildJsonObject { put("script_path", JsonPrimitive("scripts/run.sh")) },
+            ) != null
+        )
+    }
+
+    @Test
+    fun `resolveSkillToolPolicy should allow run skill script when shell access is full`() {
+        val policy = resolveSkillToolPolicy(
+            listOf(
+                skillActivation(directoryName = "runner", allowedTools = "Bash")
+            )
+        )
+
+        assertNull(
+            policy.validate(
+                toolName = "run_skill_script",
+                input = buildJsonObject { put("script_path", JsonPrimitive("scripts/run.sh")) },
+            )
         )
     }
 

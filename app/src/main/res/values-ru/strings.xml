@@ -1411,5 +1411,19 @@
   <string name="assistant_page_skills_field_allowed_tools_desc">Явно активированные навыки применяют эти ограничения инструментов во время выполнения. Поддерживаемые примеры: Read, Bash, termux_python, get_time_info, clipboard_tool.</string>
   <string name="assistant_page_skills_option_activation_desc">Должен оставаться хотя бы один путь активации. Если отключить пользовательский вызов, навык становится только автоматическим, поэтому вызов моделью нельзя отключить одновременно.</string>
   <string name="assistant_page_skills_chip_manual_only">Только вручную</string>
+  <string name="assistant_page_skills_enable_title">Включить навыки</string>
+  <string name="assistant_page_skills_enable_desc">Включить выбранные навыки из %1$s для этого ассистента.</string>
+  <string name="assistant_page_skills_option_catalog_title">Каталог для модели</string>
+  <string name="assistant_page_skills_option_catalog_desc">Предоставить выбранные автоматически вызываемые навыки в виде облегчённого каталога, чтобы модель могла решать, когда их активировать.</string>
+  <string name="assistant_page_skills_option_explicit_title">Явный вызов</string>
+  <string name="assistant_page_skills_option_explicit_desc">Разрешить пользователю вызывать выбранные навыки с помощью @skill-name или /skill-name.</string>
+  <string name="assistant_page_skills_option_script_execution_title">Выполнение скрипта навыка</string>
+  <string name="assistant_page_skills_option_script_execution_desc">Предоставляет доступ к run_skill_script для упакованных скриптов в каталоге scripts/. Отключите это, чтобы оставить навыки только для чтения.</string>
+  <string name="assistant_page_skills_import_preview_declared_tools_title">Заявленный доступ к инструментам</string>
+  <string name="assistant_page_skills_import_preview_declared_tools_line">%1$s: %2$s</string>
+  <string name="assistant_page_skills_meta_tools">Инструменты: %1$s</string>
+  <string name="assistant_page_skills_meta_source_id">ID источника: %1$s</string>
+  <string name="assistant_page_skills_meta_license">Лицензия: %1$s</string>
+  <string name="assistant_page_skills_meta_compatibility">Совместимость: %1$s</string>
+  <string name="assistant_page_skills_meta_package_hash">Хеш пакета: %1$s</string>
 </resources>
-
