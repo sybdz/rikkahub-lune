@@ -306,6 +306,12 @@ private fun SkillEntryCard(
                     } else if (!entry.modelInvocable) {
                         SkillMetaChip(label = stringResource(R.string.assistant_page_skills_chip_manual_only))
                     }
+                    if (entry.lintWarnings.isNotEmpty()) {
+                        SkillMetaChip(label = "Warnings ${entry.lintWarnings.size}")
+                    }
+                    if (entry.compatibilityNotes.isNotEmpty()) {
+                        SkillMetaChip(label = "Notes ${entry.compatibilityNotes.size}")
+                    }
                     entry.allowedTools?.let { tools ->
                         SkillMetaChip(label = stringResource(R.string.assistant_page_skills_meta_tools, tools))
                     }
@@ -320,6 +326,20 @@ private fun SkillEntryCard(
                 entry.sourceUrl?.let {
                     Text(
                         text = it,
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+                entry.lintWarnings.take(2).forEach { warning ->
+                    Text(
+                        text = "Warning: $warning",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.error,
+                    )
+                }
+                entry.compatibilityNotes.take(2).forEach { note ->
+                    Text(
+                        text = "Note: $note",
                         style = MaterialTheme.typography.labelSmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )

@@ -46,7 +46,7 @@ internal fun buildSkillRuntimeTools(
                 Load one selected model-invocable skill package by directory name.
                 Returns the skill metadata, full SKILL.md instructions, and available resource file paths.
                 Use this when a listed skill seems relevant and you need its detailed instructions.
-                Do not activate every skill preemptively.
+                Do not activate every skill preemptively. Resource reads and skill scripts only become available after activation.
             """.trimIndent().replace("\n", " "),
             parameters = {
                 InputSchema.Obj(
@@ -79,12 +79,50 @@ internal fun buildSkillRuntimeTools(
                     entry.argumentHint?.let { put("argument_hint", it) }
                     put("user_invocable", entry.userInvocable)
                     put("model_invocable", entry.modelInvocable)
+                    put(
+                        "lint_warnings",
+                        buildJsonArray {
+                            entry.lintWarnings.forEach { warning ->
+                                add(warning)
+                            }
+                        },
+                    )
+                    put(
+                        "compatibility_notes",
+                        buildJsonArray {
+                            entry.compatibilityNotes.forEach { note ->
+                                add(note)
+                            }
+                        },
+                    )
                     put("skill_markdown", activation.markdown.trim().truncateForSkillPrompt())
                     put(
                         "resource_files",
                         buildJsonArray {
                             activation.resourceFiles.forEach { resourcePath ->
                                 add(resourcePath)
+                            }
+                        },
+                    )
+                    put(
+                        "readable_resource_files",
+                        buildJsonArray {
+                            activation.resourceIndex
+                                .filter { it.textReadable }
+                                .forEach { resource ->
+                                    add(resource.path)
+                                }
+                        },
+                    )
+                    put(
+                        "resources",
+                        buildJsonArray {
+                            activation.resourceIndex.forEach { resource ->
+                                add(buildJsonObject {
+                                    put("path", resource.path)
+                                    put("kind", resource.kind.name.lowercase())
+                                    put("text_readable", resource.textReadable)
+                                })
                             }
                         },
                     )
@@ -99,7 +137,7 @@ internal fun buildSkillRuntimeTools(
             description = """
                 Read one text resource file from a selected skill package by relative path.
                 Use this after activate_skill or when you already know the exact resource path you need.
-                This is for skill-owned resources only, not arbitrary workspace files.
+                This is for text-readable skill-owned resources only, not arbitrary workspace files.
             """.trimIndent().replace("\n", " "),
             parameters = {
                 InputSchema.Obj(

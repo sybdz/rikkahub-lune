@@ -1,5 +1,8 @@
 package me.rerere.rikkahub.data.skills
 
+import kotlinx.serialization.json.contentOrNull
+import kotlinx.serialization.json.jsonObject
+import kotlinx.serialization.json.jsonPrimitive
 import me.rerere.ai.core.MessageRole
 import me.rerere.ai.provider.Model
 import me.rerere.ai.provider.ModelAbility
@@ -66,9 +69,9 @@ internal fun buildSkillsCatalogPrompt(
     return buildString {
         appendLine("Selected local skills are available for this assistant.")
         appendLine("Use `activate_skill` to load a selected skill's SKILL.md only when it is relevant.")
-        appendLine("Use `read_skill_resource` when you need the contents of one listed resource file from an activated skill.")
+        appendLine("After `activate_skill` succeeds, `read_skill_resource` becomes available for text resources from that activated skill.")
         if (assistant.skillsScriptExecutionEnabled) {
-            appendLine("Use `run_skill_script` only for scripts inside the selected skill package when a skill explicitly requires it.")
+            appendLine("After activation, `run_skill_script` becomes available for scripts inside that skill package when the skill explicitly requires it.")
         }
         appendLine("Do not activate every skill preemptively.")
         appendLine("If the user explicitly invokes a selected skill with `@skill-name`, treat it as already activated for this request.")
@@ -116,14 +119,40 @@ internal fun resolveExplicitSkillInvocations(
         .toList()
 }
 
+internal fun resolveToolActivatedSkillInvocations(
+    messages: List<UIMessage>,
+    availableSkills: Collection<SkillCatalogEntry>,
+): List<SkillCatalogEntry> {
+    val latestUserIndex = messages.indexOfLast { it.role == MessageRole.USER }
+    if (latestUserIndex < 0) return emptyList()
+
+    val entriesByDirectory = availableSkills.associateBy { it.directoryName }
+    return messages.asSequence()
+        .drop(latestUserIndex + 1)
+        .flatMap { message -> message.getTools().asSequence() }
+        .filter { tool -> tool.toolName == "activate_skill" && tool.isExecuted }
+        .mapNotNull { tool ->
+            val directoryName = tool.inputAsJson()
+                .jsonObject["skill"]
+                ?.jsonPrimitive
+                ?.contentOrNull
+                ?.trim()
+                ?: return@mapNotNull null
+            entriesByDirectory[directoryName]
+        }
+        .distinctBy { it.directoryName }
+        .toList()
+}
+
 internal fun buildActivatedSkillsPrompt(
     activations: List<SkillActivationEntry>,
 ): String? {
     if (activations.isEmpty()) return null
     return buildString {
-        appendLine("The following local skills were explicitly activated for this request.")
+        appendLine("The following local skills were activated for this request.")
         appendLine("Treat their SKILL.md instructions as active guidance for this response.")
-        appendLine("Use `read_skill_resource` when you need the contents of one of their listed resource files.")
+        appendLine("Use `read_skill_resource` only for listed files with `text-readable=true`.")
+        appendLine("Use `run_skill_script` for listed files with `kind=script` when the skill explicitly requires it.")
         if (activations.any { !it.entry.allowedTools.isNullOrBlank() }) {
             appendLine("Honor each activated skill's allowed-tools field as an enforced runtime policy for this request.")
         }
@@ -136,17 +165,33 @@ internal fun buildActivatedSkillsPrompt(
             activation.entry.version?.let { appendLine("version: $it") }
             activation.entry.allowedTools?.let { appendLine("allowed-tools: $it") }
             activation.entry.compatibility?.let { appendLine("compatibility: $it") }
+            if (activation.entry.lintWarnings.isNotEmpty()) {
+                appendLine("<skill_warnings>")
+                activation.entry.lintWarnings.forEach { warning ->
+                    appendLine("<warning><![CDATA[${warning.escapeForXmlCdata()}]]></warning>")
+                }
+                appendLine("</skill_warnings>")
+            }
+            if (activation.entry.compatibilityNotes.isNotEmpty()) {
+                appendLine("<skill_compatibility_notes>")
+                activation.entry.compatibilityNotes.forEach { note ->
+                    appendLine("<note><![CDATA[${note.escapeForXmlCdata()}]]></note>")
+                }
+                appendLine("</skill_compatibility_notes>")
+            }
             appendLine("path: ${activation.entry.path}")
             appendLine("<skill_content>")
             appendLine("<![CDATA[")
             appendLine(activation.markdown.trim().truncateForSkillPrompt().escapeForXmlCdata())
             appendLine("]]>")
             appendLine("</skill_content>")
-            val resourceFiles = activation.resourceFiles.take(ACTIVATED_SKILL_RESOURCE_FILE_LIMIT)
+            val resourceFiles = activation.resourceIndex.take(ACTIVATED_SKILL_RESOURCE_FILE_LIMIT)
             if (resourceFiles.isNotEmpty()) {
                 appendLine("<skill_resources>")
                 resourceFiles.forEach { file ->
-                    appendLine("<file><![CDATA[${file.escapeForXmlCdata()}]]></file>")
+                    appendLine(
+                        """<file kind="${file.kind.name.lowercase()}" text-readable="${file.textReadable}"><![CDATA[${file.path.escapeForXmlCdata()}]]></file>"""
+                    )
                 }
                 appendLine("</skill_resources>")
             }

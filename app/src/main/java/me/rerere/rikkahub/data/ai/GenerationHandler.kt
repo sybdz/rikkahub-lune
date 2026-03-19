@@ -50,6 +50,7 @@ import me.rerere.rikkahub.data.skills.buildSkillsCatalogPrompt
 import me.rerere.rikkahub.data.skills.resolveExplicitSkillInvocations
 import me.rerere.rikkahub.data.skills.resolveSelectedSkillEntries
 import me.rerere.rikkahub.data.skills.resolveSkillToolPolicy
+import me.rerere.rikkahub.data.skills.resolveToolActivatedSkillInvocations
 import me.rerere.rikkahub.data.skills.shouldInjectSkillsCatalog
 import me.rerere.rikkahub.data.skills.shouldLoadExplicitSkillActivations
 import me.rerere.rikkahub.data.repository.ConversationRepository
@@ -524,24 +525,30 @@ class GenerationHandler(
         } else {
             emptyList()
         }
-        val activations = if (explicitSkillInvocations.isEmpty()) {
+        val toolActivatedEntries = resolveToolActivatedSkillInvocations(
+            messages = messages,
+            availableSkills = selectedEntries,
+        )
+        val activatedEntries = (explicitSkillInvocations + toolActivatedEntries)
+            .distinctBy { it.directoryName }
+        val activations = if (activatedEntries.isEmpty()) {
             emptyList()
         } else {
-            skillsRepository.loadSkillActivations(explicitSkillInvocations.map { it.directoryName })
+            skillsRepository.loadSkillActivations(activatedEntries.map { it.directoryName })
         }
         val catalogToolEntries = if (shouldInjectSkillsCatalog(assistant, model)) {
             modelInvocableEntries
         } else {
             emptyList()
         }
-        val resourceToolEntries = (catalogToolEntries + activations.map { it.entry })
+        val resourceToolEntries = activations.map { it.entry }
             .distinctBy { it.directoryName }
         val scriptToolEntries = if (
             assistant.skillsEnabled &&
             assistant.skillsScriptExecutionEnabled &&
             model.abilities.contains(ModelAbility.TOOL)
         ) {
-            resourceToolEntries
+            activations.map { it.entry }.distinctBy { it.directoryName }
         } else {
             emptyList()
         }

@@ -60,6 +60,92 @@ internal const val SKILL_RESOURCE_DEFAULT_READ_CHAR_LIMIT = 12_000
 internal const val SKILL_RESOURCE_MAX_READ_CHAR_LIMIT = 48_000
 private const val SKILL_SCRIPT_MAX_ARGS = 24
 private const val SKILL_SCRIPT_MAX_ARG_CHARS = 512
+private const val SKILL_DESCRIPTION_WARN_LENGTH = 240
+private const val SKILL_MARKDOWN_BODY_WARN_LINE_LIMIT = 500
+
+private val TextSkillResourceExtensions = setOf(
+    "c",
+    "cc",
+    "conf",
+    "cpp",
+    "css",
+    "csv",
+    "env",
+    "go",
+    "gradle",
+    "graphql",
+    "groovy",
+    "h",
+    "html",
+    "ini",
+    "java",
+    "js",
+    "json",
+    "jsx",
+    "kts",
+    "kt",
+    "less",
+    "lock",
+    "lua",
+    "mjs",
+    "md",
+    "php",
+    "properties",
+    "proto",
+    "py",
+    "rb",
+    "rs",
+    "sass",
+    "scss",
+    "sh",
+    "sql",
+    "svg",
+    "text",
+    "toml",
+    "ts",
+    "tsx",
+    "txt",
+    "xml",
+    "yaml",
+    "yml",
+)
+
+private val BinarySkillResourceExtensions = setOf(
+    "aab",
+    "apk",
+    "avif",
+    "bin",
+    "db",
+    "doc",
+    "docx",
+    "eot",
+    "gif",
+    "heic",
+    "ico",
+    "jar",
+    "jpeg",
+    "jpg",
+    "keystore",
+    "m4a",
+    "mov",
+    "mp3",
+    "mp4",
+    "otf",
+    "pdf",
+    "png",
+    "ppt",
+    "pptx",
+    "sqlite",
+    "ttf",
+    "wav",
+    "webm",
+    "webp",
+    "woff",
+    "woff2",
+    "xls",
+    "xlsx",
+    "zip",
+)
 
 @Serializable
 enum class SkillSourceType {
@@ -85,6 +171,8 @@ data class SkillCatalogEntry(
     val userInvocable: Boolean = true,
     val modelInvocable: Boolean = true,
     val isBundled: Boolean = false,
+    val lintWarnings: List<String> = emptyList(),
+    val compatibilityNotes: List<String> = emptyList(),
 )
 
 data class SkillCreationResult(
@@ -121,6 +209,8 @@ data class SkillImportPreviewEntry(
     val referenceFiles: Int = 0,
     val assetFiles: Int = 0,
     val scriptPaths: List<String> = emptyList(),
+    val lintWarnings: List<String> = emptyList(),
+    val compatibilityNotes: List<String> = emptyList(),
 )
 
 data class SkillImportPreview(
@@ -134,11 +224,27 @@ data class SkillImportPreview(
     val entries: List<SkillImportPreviewEntry>,
 )
 
+enum class SkillResourceKind {
+    REFERENCE,
+    EXAMPLE,
+    SCRIPT,
+    ASSET,
+    OTHER,
+}
+
+data class SkillResourceFile(
+    val path: String,
+    val kind: SkillResourceKind,
+    val textReadable: Boolean,
+)
+
 data class SkillActivationEntry(
     val entry: SkillCatalogEntry,
     val markdown: String,
     val resourceFiles: List<String>,
-)
+) {
+    val resourceIndex: List<SkillResourceFile> = resourceFiles.map(::classifySkillResourceFile)
+}
 
 data class SkillResourceReadResult(
     val entry: SkillCatalogEntry,
@@ -193,6 +299,8 @@ internal data class SkillFrontmatter(
     val name: String,
     val description: String,
     val extras: SkillFrontmatterExtras = SkillFrontmatterExtras(),
+    val lintWarnings: List<String> = emptyList(),
+    val compatibilityNotes: List<String> = emptyList(),
 ) {
     val license: String? = extras.license
     val compatibility: String? = extras.compatibility
@@ -720,6 +828,10 @@ class SkillsRepository(
         maxChars: Int = SKILL_RESOURCE_DEFAULT_READ_CHAR_LIMIT,
     ): SkillResourceReadResult {
         val normalizedPath = normalizeSkillResourcePath(relativePath)
+        val resourceDescriptor = classifySkillResourceFile(normalizedPath)
+        require(resourceDescriptor.textReadable) {
+            "Skill resource is not a text-readable file: $normalizedPath"
+        }
         val safeMaxChars = maxChars.coerceIn(1, SKILL_RESOURCE_MAX_READ_CHAR_LIMIT)
         val maxBytes = safeMaxChars * 4
         return withContext(Dispatchers.IO) {
@@ -1911,6 +2023,28 @@ private val BUNDLED_SKILLS = listOf(
     )
 )
 
+private val SupportedSkillFrontmatterKeys = setOf(
+    "name",
+    "description",
+    "license",
+    "compatibility",
+    "allowed-tools",
+    "argument-hint",
+    "user-invocable",
+    "disable-model-invocation",
+    "metadata",
+    "author",
+    "version",
+)
+
+private val RikkaHubUnsupportedAnthropicFrontmatterKeys = setOf(
+    "agent",
+    "context",
+    "hooks",
+    "model",
+    "tools",
+)
+
 internal fun parseSkillFrontmatter(markdown: String): SkillFrontmatterParseResult {
     val section = extractSkillFrontmatterSection(markdown)
     if (section is SkillFrontmatterSectionResult.Error) {
@@ -1949,13 +2083,111 @@ internal fun parseSkillFrontmatter(markdown: String): SkillFrontmatterParseResul
         return SkillFrontmatterParseResult.Error(SkillInvalidReason.NoActivationPath)
     }
 
+    val lintWarnings = buildSkillLintWarnings(
+        description = description,
+        body = section.body,
+        allowedTools = extras.allowedTools,
+    )
+    val compatibilityNotes = buildSkillCompatibilityNotes(
+        values = values,
+        compatibility = extras.compatibility,
+        body = section.body,
+    )
+
     return SkillFrontmatterParseResult.Success(
         SkillFrontmatter(
             name = name,
             description = description,
             extras = extras,
+            lintWarnings = lintWarnings,
+            compatibilityNotes = compatibilityNotes,
         )
     )
+}
+
+internal fun classifySkillResourceFile(path: String): SkillResourceFile {
+    val normalizedPath = normalizeSkillResourcePath(path)
+    val lowerPath = normalizedPath.lowercase()
+    val kind = when {
+        lowerPath.startsWith("references/") -> SkillResourceKind.REFERENCE
+        lowerPath.startsWith("examples/") -> SkillResourceKind.EXAMPLE
+        lowerPath.startsWith("scripts/") -> SkillResourceKind.SCRIPT
+        lowerPath.startsWith("assets/") -> SkillResourceKind.ASSET
+        else -> SkillResourceKind.OTHER
+    }
+    return SkillResourceFile(
+        path = normalizedPath,
+        kind = kind,
+        textReadable = isLikelyTextSkillResourcePath(lowerPath),
+    )
+}
+
+private fun isLikelyTextSkillResourcePath(path: String): Boolean {
+    val extension = path.substringAfterLast('.', missingDelimiterValue = "")
+        .lowercase()
+        .takeIf { it.isNotBlank() }
+    if (extension == null) {
+        return !path.startsWith("assets/")
+    }
+    if (extension in BinarySkillResourceExtensions) return false
+    if (extension in TextSkillResourceExtensions) return true
+    return !path.startsWith("assets/")
+}
+
+private fun buildSkillLintWarnings(
+    description: String,
+    body: String,
+    allowedTools: String?,
+): List<String> {
+    return buildList {
+        if (description.length > SKILL_DESCRIPTION_WARN_LENGTH) {
+            add("Description is long. Keep trigger text concise to preserve catalog budget and improve discovery.")
+        }
+        if (body.lineSequence().count() > SKILL_MARKDOWN_BODY_WARN_LINE_LIMIT) {
+            add("SKILL.md body exceeds 500 lines. Move detailed material into references/ or scripts/.")
+        }
+        val unknownAllowedTools = findUnknownSkillAllowedToolTokens(allowedTools)
+        if (unknownAllowedTools.isNotEmpty()) {
+            add("allowed-tools contains unsupported tokens: ${unknownAllowedTools.joinToString(", ")}")
+        }
+    }
+}
+
+private fun buildSkillCompatibilityNotes(
+    values: Map<*, *>,
+    compatibility: String?,
+    body: String,
+): List<String> {
+    val unsupportedKeys = values.keys
+        .mapNotNull { key -> key as? String }
+        .filter { it !in SupportedSkillFrontmatterKeys }
+        .sorted()
+
+    return buildList {
+        unsupportedKeys.forEach { key ->
+            if (key in RikkaHubUnsupportedAnthropicFrontmatterKeys) {
+                add("Frontmatter field `$key` is not supported by RikkaHub yet and will be ignored.")
+            } else {
+                add("Frontmatter field `$key` is not recognized by RikkaHub and will be ignored.")
+            }
+        }
+        if (!compatibility.isNullOrBlank()) {
+            add("compatibility is informational only. RikkaHub does not enforce it at runtime yet.")
+        }
+        if (body.contains("\$ARGUMENTS")) {
+            add("\$ARGUMENTS placeholders are not expanded by RikkaHub yet.")
+        }
+        if (body.contains("\${CLAUDE_SKILL_DIR}")) {
+            add("\${CLAUDE_SKILL_DIR} is not expanded by RikkaHub yet.")
+        }
+        if (body.lineSequence().any { line ->
+                val trimmed = line.trimStart()
+                trimmed.startsWith("!") && !trimmed.startsWith("![")
+            }
+        ) {
+            add("Claude Code style !command preprocessing is not supported by RikkaHub.")
+        }
+    }
 }
 
 internal fun sanitizeSkillDirectoryName(
@@ -2271,6 +2503,8 @@ internal suspend fun inspectSkillDirectory(
                     userInvocable = parsed.frontmatter.userInvocable,
                     modelInvocable = parsed.frontmatter.modelInvocable,
                     isBundled = isCanonicalBundledMetadata(sourceMetadata, directory.directoryName),
+                    lintWarnings = parsed.frontmatter.lintWarnings,
+                    compatibilityNotes = parsed.frontmatter.compatibilityNotes,
                 )
             )
         }
@@ -2620,6 +2854,8 @@ internal fun buildSkillImportPreview(
                 .filter { it.path.startsWith("$directoryName/scripts/") }
                 .map { it.path.removePrefix("$directoryName/") }
                 .take(SKILL_IMPORT_PREVIEW_SCRIPT_LIST_LIMIT),
+            lintWarnings = frontmatter.lintWarnings,
+            compatibilityNotes = frontmatter.compatibilityNotes,
         )
     }
     val preview = SkillImportPreview(

@@ -14,19 +14,38 @@ Use this when the task is about authoring or revising a skill.
 
 ## Workflow
 
-1. Identify the skill's trigger condition and keep it specific.
-2. Create one directory per skill under `skills/`.
-3. Write `SKILL.md` with required YAML frontmatter:
+1. Start from 2 to 3 concrete use cases instead of a vague capability list.
+2. Identify the trigger condition and keep it specific.
+3. Write at least 2 trigger examples and 1 non-trigger example before polishing the body.
+4. Create one directory per skill under `skills/`.
+5. Write `SKILL.md` with required YAML frontmatter:
    - `name`
    - `description`
-4. Keep the body concise. Put only workflow, decision rules, and validation steps in `SKILL.md`.
-5. Prefer progressive disclosure:
+6. Keep the body concise. Put only workflow, decision rules, and validation steps in `SKILL.md`.
+7. Prefer progressive disclosure:
    - Keep `SKILL.md` short.
    - Move long examples or references into `references/`.
    - Put reusable automation in `scripts/`.
-6. Add `allowed-tools`, `argument-hint`, `author`, and `version` when they materially improve execution and provenance.
-7. Before packaging, validate that the skill still has at least one activation path.
-8. For zip sharing, package the whole skill directory with `SKILL.md` at the skill root.
+8. Add `allowed-tools`, `argument-hint`, `author`, and `version` when they materially improve execution and provenance.
+9. Treat `compatibility` as documentation only. Do not rely on it for runtime enforcement.
+10. Before packaging, validate that the skill still has at least one activation path.
+11. For zip sharing, package the whole skill directory with `SKILL.md` at the skill root.
+
+## Trigger Quality
+
+- The `description` must explain both what the skill does and when to use it.
+- Keep the description compact. If it grows long, move detail into the body or `references/`.
+- For destructive or side-effectful workflows, prefer manual invocation over model auto-invocation.
+- If the skill depends on `scripts/`, make the body explicitly say when to execute them instead of reading them into context.
+
+## Evaluation
+
+- Draft a small eval set before calling the skill "done".
+- Include:
+  - 2 to 3 prompts that should trigger the skill.
+  - 1 prompt that should not trigger it.
+- If the skill changes files or produces deterministic output, define a simple verification step.
+- If the skill is being revised, compare the new version against the previous one instead of evaluating in isolation.
 
 ## Template
 
@@ -48,4 +67,6 @@ State when to use the skill, what to inspect, and the steps to follow.
 - Do not create extra docs like README or changelog unless the task explicitly needs them.
 - If variants exist, keep `SKILL.md` brief and move detailed material into `references/`.
 - If shell access is needed, declare it explicitly in `allowed-tools`.
+- Keep `SKILL.md` under roughly 500 lines when possible.
+- Use `references/`, `examples/`, `assets/`, and `scripts/` intentionally instead of treating every file as generic context.
 - If a task can be validated, include a short verification step instead of leaving success implicit.

@@ -905,6 +905,12 @@ fun SkillsPicker(
                                 )
                             }
                         }
+                    val lintWarnings = preview.entries.flatMap { entry ->
+                        entry.lintWarnings.map { warning -> "${entry.directoryName}: $warning" }
+                    }
+                    val compatibilityNotes = preview.entries.flatMap { entry ->
+                        entry.compatibilityNotes.map { note -> "${entry.directoryName}: $note" }
+                    }
                     Text(
                         text = stringResource(
                             R.string.assistant_page_skills_import_preview_summary,
@@ -925,6 +931,20 @@ fun SkillsPicker(
                         SkillsInfoCard(
                             title = stringResource(R.string.assistant_page_skills_import_preview_declared_tools_title),
                             text = declaredToolAccess.joinToString(separator = "\n"),
+                            isError = false,
+                        )
+                    }
+                    if (lintWarnings.isNotEmpty()) {
+                        SkillsInfoCard(
+                            title = "Skill warnings",
+                            text = lintWarnings.joinToString(separator = "\n"),
+                            isError = false,
+                        )
+                    }
+                    if (compatibilityNotes.isNotEmpty()) {
+                        SkillsInfoCard(
+                            title = "Compatibility notes",
+                            text = compatibilityNotes.joinToString(separator = "\n"),
                             isError = false,
                         )
                     }

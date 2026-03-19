@@ -197,6 +197,15 @@ class SkillRuntimePolicyTest {
         assertFalse(isReadOnlyShellCommand("cat README.md > /tmp/out"))
     }
 
+    @Test
+    fun `findUnknownSkillAllowedToolTokens should report unsupported syntax`() {
+        assertEquals(
+            listOf("Bash(gh", "*)"),
+            findUnknownSkillAllowedToolTokens("Bash(gh *)"),
+        )
+        assertTrue(findUnknownSkillAllowedToolTokens("Bash Read").isEmpty())
+    }
+
     private fun stubTool(name: String): Tool {
         return Tool(
             name = name,

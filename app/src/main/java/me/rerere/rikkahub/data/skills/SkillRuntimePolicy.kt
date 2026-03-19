@@ -9,6 +9,30 @@ import me.rerere.ai.core.Tool
 
 private val SkillAllowedToolSplitRegex = Regex("[,，\\s\\r\\n]+")
 private val ReadOnlyShellOperatorsRegex = Regex("""(^|[^\\])(?:>>?|<<|[;&|])""")
+private val KnownSkillAllowedToolTokens = setOf(
+    "ask_user",
+    "bash",
+    "clipboard",
+    "clipboard_tool",
+    "close_pty_session",
+    "eval_javascript",
+    "get_time_info",
+    "javascript",
+    "js",
+    "list_pty_sessions",
+    "python",
+    "read",
+    "read-only",
+    "readonly",
+    "shell",
+    "termux",
+    "termux_exec",
+    "termux_python",
+    "text_to_speech",
+    "time",
+    "tts",
+    "write_stdin",
+)
 private val GitReadOnlySubcommands = setOf(
     "status",
     "diff",
@@ -170,6 +194,19 @@ private data class ParsedSkillToolRestriction(
     val visibleToolNames: Set<String>,
     val shellAccess: SkillShellAccess,
 )
+
+internal fun findUnknownSkillAllowedToolTokens(rawAllowedTools: String?): List<String> {
+    val normalized = rawAllowedTools
+        ?.trim()
+        ?.takeIf { it.isNotBlank() }
+        ?: return emptyList()
+
+    return normalized.split(SkillAllowedToolSplitRegex)
+        .map { it.trim() }
+        .filter { it.isNotBlank() }
+        .filter { token -> token.lowercase() !in KnownSkillAllowedToolTokens }
+        .distinct()
+}
 
 internal fun resolveSkillToolPolicy(
     activations: List<SkillActivationEntry>,

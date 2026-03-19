@@ -1,8 +1,10 @@
 package me.rerere.rikkahub.data.skills
 
+import me.rerere.ai.core.MessageRole
 import me.rerere.ai.provider.Model
 import me.rerere.ai.provider.ModelAbility
 import me.rerere.ai.ui.UIMessage
+import me.rerere.ai.ui.UIMessagePart
 import me.rerere.rikkahub.data.model.Assistant
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -56,6 +58,31 @@ class SkillsPromptTest {
         assertTrue(result.frontmatter.modelInvocable)
         assertEquals("anthropic", result.frontmatter.author)
         assertEquals("1.0.0", result.frontmatter.version)
+    }
+
+    @Test
+    fun `parseSkillFrontmatter should surface lint warnings and compatibility notes`() {
+        val markdown = """
+            ---
+            name: webapp-testing
+            description: ${"a".repeat(260)}
+            allowed-tools: Bash(gh *)
+            context: fork
+            compatibility: claude-code
+            ---
+            !python scripts/run.py
+            
+            ${"$"}ARGUMENTS
+        """.trimIndent()
+
+        val result = parseSkillFrontmatter(markdown) as SkillFrontmatterParseResult.Success
+
+        assertTrue(result.frontmatter.lintWarnings.any { it.contains("Description is long") })
+        assertTrue(result.frontmatter.lintWarnings.any { it.contains("unsupported tokens") })
+        assertTrue(result.frontmatter.compatibilityNotes.any { it.contains("`context`") })
+        assertTrue(result.frontmatter.compatibilityNotes.any { it.contains("informational only") })
+        assertTrue(result.frontmatter.compatibilityNotes.any { it.contains("\$ARGUMENTS") })
+        assertTrue(result.frontmatter.compatibilityNotes.any { it.contains("!command") })
     }
 
     @Test
@@ -134,8 +161,8 @@ class SkillsPromptTest {
 
         assertNotNull(prompt)
         assertTrue(prompt!!.contains("Use `activate_skill` to load a selected skill's SKILL.md"))
-        assertTrue(prompt.contains("Use `read_skill_resource`"))
-        assertTrue(prompt.contains("Use `run_skill_script`"))
+        assertTrue(prompt.contains("`read_skill_resource` becomes available"))
+        assertTrue(prompt.contains("`run_skill_script` becomes available"))
         assertTrue(prompt.contains("find-hugeicons"))
         assertTrue(prompt.contains("Search the HugeIcons library before using an icon."))
         assertTrue(prompt.contains("source: bundled"))
@@ -420,6 +447,46 @@ class SkillsPromptTest {
     }
 
     @Test
+    fun `resolveToolActivatedSkillInvocations should track activate skill tool calls for current request only`() {
+        val skills = listOf(
+            SkillCatalogEntry(
+                directoryName = "find-hugeicons",
+                path = "/skills/find-hugeicons",
+                name = "find-hugeicons",
+                description = "Find icons",
+            ),
+        )
+
+        val assistantToolMessage = UIMessage(
+            role = MessageRole.ASSISTANT,
+            parts = listOf(
+                UIMessagePart.Tool(
+                    toolCallId = "call_1",
+                    toolName = "activate_skill",
+                    input = """{"skill":"find-hugeicons"}""",
+                    output = listOf(UIMessagePart.Text("{}")),
+                )
+            ),
+        )
+
+        val activated = resolveToolActivatedSkillInvocations(
+            messages = listOf(UIMessage.user("Please inspect icons"), assistantToolMessage),
+            availableSkills = skills,
+        )
+        val cleared = resolveToolActivatedSkillInvocations(
+            messages = listOf(
+                UIMessage.user("Please inspect icons"),
+                assistantToolMessage,
+                UIMessage.user("New request without activations"),
+            ),
+            availableSkills = skills,
+        )
+
+        assertEquals(listOf("find-hugeicons"), activated.map { it.directoryName })
+        assertTrue(cleared.isEmpty())
+    }
+
+    @Test
     fun `buildActivatedSkillsPrompt should include escaped skill contents and resources`() {
         val prompt = buildActivatedSkillsPrompt(
             listOf(
@@ -431,6 +498,8 @@ class SkillsPromptTest {
                         description = "Test local web apps",
                         sourceType = SkillSourceType.BUNDLED,
                         allowedTools = "Bash Read",
+                        lintWarnings = listOf("Description is long"),
+                        compatibilityNotes = listOf("context: fork is not supported"),
                     ),
                     markdown = buildSkillMarkdown(
                         name = "webapp-testing",
@@ -445,10 +514,13 @@ class SkillsPromptTest {
         assertNotNull(prompt)
         assertTrue(prompt!!.contains("<activated_skill>"))
         assertTrue(prompt.contains("webapp-testing"))
-        assertTrue(prompt.contains("scripts/with_server.py"))
+        assertTrue(prompt.contains("kind=\"script\""))
+        assertTrue(prompt.contains("text-readable=\"true\""))
         assertTrue(prompt.contains("<skill_content>"))
         assertTrue(prompt.contains("<![CDATA["))
         assertTrue(prompt.contains("]]]]><![CDATA[>"))
         assertTrue(prompt.contains("allowed-tools field as an enforced runtime policy"))
+        assertTrue(prompt.contains("<skill_warnings>"))
+        assertTrue(prompt.contains("<skill_compatibility_notes>"))
     }
 }

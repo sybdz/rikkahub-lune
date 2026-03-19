@@ -201,6 +201,7 @@ class SkillsRepositoryTest {
         assertEquals("skill-creator", result.entries.single().directoryName)
         assertEquals("Skill Creator", result.entries.single().name)
         assertTrue(result.entries.single().isBundled)
+        assertTrue(result.entries.single().lintWarnings.isEmpty())
         assertTrue(result.invalidEntries.isEmpty())
     }
 
@@ -441,6 +442,34 @@ class SkillsRepositoryTest {
     }
 
     @Test
+    fun `classifySkillResourceFile should classify common skill directories and text readability`() {
+        assertEquals(
+            SkillResourceFile(
+                path = "references/guide.md",
+                kind = SkillResourceKind.REFERENCE,
+                textReadable = true,
+            ),
+            classifySkillResourceFile("references/guide.md"),
+        )
+        assertEquals(
+            SkillResourceFile(
+                path = "scripts/run.sh",
+                kind = SkillResourceKind.SCRIPT,
+                textReadable = true,
+            ),
+            classifySkillResourceFile("scripts/run.sh"),
+        )
+        assertEquals(
+            SkillResourceFile(
+                path = "assets/logo.png",
+                kind = SkillResourceKind.ASSET,
+                textReadable = false,
+            ),
+            classifySkillResourceFile("assets/logo.png"),
+        )
+    }
+
+    @Test
     fun `buildSkillMarkdown should reject skills without any activation path`() {
         val result = runCatching {
             buildSkillMarkdown(
@@ -595,6 +624,39 @@ class SkillsRepositoryTest {
         assertEquals("demo-skill", entry.sourceId)
         assertNotNull(entry.packageHash)
         assertEquals(listOf("scripts/run.sh"), entry.scriptPaths)
+    }
+
+    @Test
+    fun `buildSkillImportPreview should surface lint warnings and compatibility notes`() {
+        val archive = ParsedSkillArchive(
+            directories = emptySet(),
+            files = listOf(
+                SkillArchiveFile(
+                    path = "SKILL.md",
+                    bytes = """
+                        ---
+                        name: Demo Skill
+                        description: ${"x".repeat(260)}
+                        context: fork
+                        compatibility: claude-code
+                        allowed-tools: Bash(gh *)
+                        ---
+                        !python scripts/run.py
+                    """.trimIndent().toByteArray()
+                )
+            ),
+        )
+
+        val preview = buildSkillImportPreview(
+            archive = archive,
+            suggestedDirectoryName = "demo-skill",
+        ).preview
+
+        val entry = preview.entries.single()
+        assertTrue(entry.lintWarnings.any { it.contains("Description is long") })
+        assertTrue(entry.lintWarnings.any { it.contains("unsupported tokens") })
+        assertTrue(entry.compatibilityNotes.any { it.contains("`context`") })
+        assertTrue(entry.compatibilityNotes.any { it.contains("informational only") })
     }
 
     @Test
