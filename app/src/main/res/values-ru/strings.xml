@@ -1130,9 +1130,9 @@
   <string name="assistant_page_skills_root_fallback">workdir/skills</string>
   <string name="assistant_page_skills_selected_count">Выбрано: %1$d</string>
   <string name="assistant_page_skills_termux_required_title">Требуется инструмент Termux</string>
-  <string name="assistant_page_skills_termux_required_desc">Перед использованием навыков в чате включите Локальные инструменты &gt; Команда Termux.</string>
+  <string name="assistant_page_skills_termux_required_desc">Для автоматического обнаружения каталога и shell-сценариев навыков включите Локальные инструменты &gt; Команда Termux. Явный вызов `@skill-name` по-прежнему загружает инструкции навыка.</string>
   <string name="assistant_page_skills_model_unsupported_title">Текущая модель не поддерживает инструменты</string>
-  <string name="assistant_page_skills_model_unsupported_desc">Выбор сохраняется, но каталог навыков не будет добавлен в контекст, пока активная модель не поддерживает вызов инструментов.</string>
+  <string name="assistant_page_skills_model_unsupported_desc">Выбор сохраняется, но автоматическое обнаружение навыков останется выключенным, пока активная модель не начнет поддерживать вызовы инструментов. Явный вызов `@skill-name` по-прежнему загружает инструкции навыка.</string>
   <string name="assistant_page_skills_refresh_failed_title">Не удалось обновить навыки</string>
   <string name="assistant_page_skills_refreshing">Обновление навыков из %1$s</string>
   <string name="assistant_page_skills_empty_title">Навыки не найдены</string>
@@ -1385,13 +1385,13 @@
   <string name="assistant_page_skills_field_license">Лицензия</string>
   <string name="assistant_page_skills_field_compatibility">Совместимость</string>
   <string name="assistant_page_skills_field_allowed_tools">Разрешённые инструменты</string>
-  <string name="assistant_page_skills_field_allowed_tools_placeholder">Bash Read</string>
+  <string name="assistant_page_skills_field_allowed_tools_placeholder">Read, termux_python, get_time_info</string>
   <string name="assistant_page_skills_field_argument_hint">Подсказка аргумента</string>
   <string name="assistant_page_skills_field_argument_hint_placeholder">&lt;путь-к-проекту&gt;</string>
   <string name="assistant_page_skills_field_author">Автор</string>
   <string name="assistant_page_skills_field_version">Версия</string>
   <string name="assistant_page_skills_option_user_invocable_title">Вызывается пользователем</string>
-  <string name="assistant_page_skills_option_user_invocable_desc">Разрешить вызов через `/skill-name` и `@skill-name`</string>
+  <string name="assistant_page_skills_option_user_invocable_desc">Разрешить вызов через `@skill-name`. Если это не похоже на путь, `/skill-name` тоже остается доступным.</string>
   <string name="assistant_page_skills_option_disable_model_invocation_title">Отключить вызов моделью</string>
   <string name="assistant_page_skills_option_disable_model_invocation_desc">Требовать явного вызова вместо автоматического срабатывания</string>
   <string name="assistant_page_skills_chip_count_skills">%1$d навык(а)</string>
@@ -1405,4 +1405,11 @@
   <string name="assistant_page_skills_chip_auto_only">Только автоматически</string>
   <string name="assistant_page_skills_chip_version">v%1$s</string>
   <string name="chat_input_attachment_fallback_file">Файл</string>
+  <string name="assistant_page_skills_selected_breakdown">Готово для автообнаружения: %1$d • Только явный вызов: %2$d</string>
+  <string name="assistant_page_skills_reason_no_activation_path">SKILL.md должен разрешать либо пользовательский, либо модельный вызов</string>
+  <string name="assistant_page_skills_import_preview_scripts_list">Скрипты:\n%1$s</string>
+  <string name="assistant_page_skills_field_allowed_tools_desc">Явно активированные навыки применяют эти ограничения инструментов во время выполнения. Поддерживаемые примеры: Read, Bash, termux_python, get_time_info, clipboard_tool.</string>
+  <string name="assistant_page_skills_option_activation_desc">Должен оставаться хотя бы один путь активации. Если отключить пользовательский вызов, навык становится только автоматическим, поэтому вызов моделью нельзя отключить одновременно.</string>
+  <string name="assistant_page_skills_chip_manual_only">Только вручную</string>
 </resources>
+

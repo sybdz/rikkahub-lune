@@ -635,7 +635,7 @@ private fun SkillInvokeRow(
                         tint = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                     Text(
-                        text = "/${skill.directoryName}",
+                        text = "@${skill.directoryName}",
                         style = MaterialTheme.typography.labelMedium,
                     )
                 }

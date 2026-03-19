@@ -1,6 +1,11 @@
 ---
 name: "skill-creator"
 description: "Use when the user wants to create, update, package, or improve a local skill, including SKILL.md frontmatter, folder layout, templates, and zip-ready skill bundles."
+license: "Apache-2.0"
+allowed-tools: "Read Bash"
+metadata:
+  author: "RikkaHub"
+  version: "2.0.0"
 ---
 
 # Skill Creator
@@ -14,9 +19,14 @@ Use this when the task is about authoring or revising a skill.
 3. Write `SKILL.md` with required YAML frontmatter:
    - `name`
    - `description`
-4. Keep the body concise. Put only the workflow and decision rules there.
-5. Add `scripts/`, `references/`, or `assets/` only when they materially help.
-6. For zip sharing, package the whole skill directory with `SKILL.md` at the skill root.
+4. Keep the body concise. Put only workflow, decision rules, and validation steps in `SKILL.md`.
+5. Prefer progressive disclosure:
+   - Keep `SKILL.md` short.
+   - Move long examples or references into `references/`.
+   - Put reusable automation in `scripts/`.
+6. Add `allowed-tools`, `argument-hint`, `author`, and `version` when they materially improve execution and provenance.
+7. Before packaging, validate that the skill still has at least one activation path.
+8. For zip sharing, package the whole skill directory with `SKILL.md` at the skill root.
 
 ## Template
 
@@ -24,6 +34,7 @@ Use this when the task is about authoring or revising a skill.
 ---
 name: "example-skill"
 description: "Use when the user needs ..."
+allowed-tools: "Read"
 ---
 
 # Overview
@@ -36,3 +47,5 @@ State when to use the skill, what to inspect, and the steps to follow.
 - Prefer short, high-signal instructions over long explanations.
 - Do not create extra docs like README or changelog unless the task explicitly needs them.
 - If variants exist, keep `SKILL.md` brief and move detailed material into `references/`.
+- If shell access is needed, declare it explicitly in `allowed-tools`.
+- If a task can be validated, include a short verification step instead of leaving success implicit.

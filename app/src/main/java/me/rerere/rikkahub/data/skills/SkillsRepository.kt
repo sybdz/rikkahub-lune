@@ -40,6 +40,7 @@ private const val SKILL_COMMAND_TIMEOUT_MS = 30_000L
 private const val SKILL_WRITE_TIMEOUT_MS = 60_000L
 private const val SKILL_SINGLE_WRITE_BYTES_LIMIT = 192 * 1024
 private const val SKILL_CHUNK_WRITE_BYTES = 48 * 1024
+private const val SKILL_CATALOG_REFRESH_TTL_MS = 60_000L
 private const val DEFAULT_IMPORTED_SKILL_DIRECTORY = "skill-import"
 private const val DEFAULT_CREATED_SKILL_DIRECTORY = "new-skill"
 private const val SKILL_PACKAGE_FILE_NAME = "SKILL.md"
@@ -51,6 +52,7 @@ private const val SKILL_ARCHIVE_MAX_TOTAL_BYTES = 4 * 1024 * 1024
 private const val SKILL_ARCHIVE_SINGLE_FILE_BYTES_LIMIT = 512 * 1024
 private const val SKILL_ARCHIVE_MAX_DEPTH = 8
 private const val SKILL_RESOURCE_LIST_LIMIT = 128
+private const val SKILL_IMPORT_PREVIEW_SCRIPT_LIST_LIMIT = 8
 private const val SKILL_SOURCE_METADATA_SCHEMA_VERSION = 1
 
 @Serializable
@@ -102,11 +104,14 @@ data class SkillImportPreviewEntry(
     val directoryName: String,
     val name: String,
     val description: String,
+    val sourceId: String? = null,
     val version: String? = null,
     val author: String? = null,
+    val packageHash: String? = null,
     val scriptFiles: Int = 0,
     val referenceFiles: Int = 0,
     val assetFiles: Int = 0,
+    val scriptPaths: List<String> = emptyList(),
 )
 
 data class SkillImportPreview(
@@ -139,6 +144,7 @@ sealed interface SkillInvalidReason {
     data object FrontmatterNotClosed : SkillInvalidReason
     data object MissingName : SkillInvalidReason
     data object MissingDescription : SkillInvalidReason
+    data object NoActivationPath : SkillInvalidReason
     data class FailedToRead(val detail: String) : SkillInvalidReason
     data class Other(val message: String) : SkillInvalidReason
 }
@@ -286,6 +292,7 @@ class SkillsRepository(
         val settings = settingsStore.settingsFlow.value
         if (settings.init) return
         if (!force && _state.value.isLoading && _state.value.workdir == settings.termuxWorkdir) return
+        if (!force && !shouldRefreshCatalogSnapshot(_state.value, settings.termuxWorkdir)) return
         appScope.launch {
             refresh(settings.termuxWorkdir)
         }
@@ -303,7 +310,7 @@ class SkillsRepository(
         forceRefresh: Boolean = false,
         workdir: String = settingsStore.settingsFlow.value.termuxWorkdir,
     ): SkillsCatalogState {
-        if (forceRefresh || state.value.refreshedAt == 0L || state.value.workdir != workdir) {
+        if (forceRefresh || shouldRefreshCatalogSnapshot(state.value, workdir)) {
             runCatching {
                 refresh(workdir)
             }.onFailure { error ->
@@ -524,14 +531,16 @@ class SkillsRepository(
                         bytes = file.bytes,
                     )
                 }
+                val previewEntriesByDirectory = previewData.preview.entries.associateBy { it.directoryName }
                 importPlan.topLevelDirectories.forEach { directoryName ->
                     writeSkillSourceMetadata(
                         rootPath = stageRootPath,
                         workdir = workdir,
                         directoryName = directoryName,
-                        metadata = SkillSourceMetadata(
-                            sourceType = SkillSourceType.IMPORTED,
-                            sourceId = archiveName?.substringBeforeLast('.', archiveName)?.ifBlank { directoryName } ?: directoryName,
+                        metadata = buildImportedSkillSourceMetadata(
+                            directoryName = directoryName,
+                            previewEntry = previewEntriesByDirectory[directoryName],
+                            archiveName = archiveName,
                         ),
                     )
                 }
@@ -1314,7 +1323,7 @@ class SkillsRepository(
             if [ ! -d "${'$'}ROOT" ]; then
               exit 0
             fi
-            find "${'$'}ROOT" -mindepth 1 -maxdepth 1 \( -type d -o -type l \) -print0 | sort -z | while IFS= read -r -d '' dir; do
+            find "${'$'}ROOT" -mindepth 1 -maxdepth 1 -type d -print0 | sort -z | while IFS= read -r -d '' dir; do
               [ -n "${'$'}dir" ] || continue
               name="${'$'}(basename "${'$'}dir")"
               encoded_name="${'$'}(printf '%s' "${'$'}name" | base64 | tr -d '\n')"
@@ -1699,21 +1708,24 @@ internal fun parseSkillFrontmatter(markdown: String): SkillFrontmatterParseResul
         values.stringValue("version")?.let { putIfAbsent("version", it) }
     }
 
+    val extras = SkillFrontmatterExtras(
+        license = values.stringLikeValue("license"),
+        compatibility = values.stringLikeValue("compatibility"),
+        allowedTools = values.stringLikeValue("allowed-tools"),
+        argumentHint = values.stringLikeValue("argument-hint"),
+        userInvocable = values.booleanValue("user-invocable") ?: true,
+        disableModelInvocation = values.booleanValue("disable-model-invocation") ?: false,
+        metadata = metadata,
+    )
+    if (!extras.hasActivationPath()) {
+        return SkillFrontmatterParseResult.Error(SkillInvalidReason.NoActivationPath)
+    }
+
     return SkillFrontmatterParseResult.Success(
         SkillFrontmatter(
             name = name,
             description = description,
-            extras = normalizeSkillFrontmatterExtras(
-                SkillFrontmatterExtras(
-                    license = values.stringLikeValue("license"),
-                    compatibility = values.stringLikeValue("compatibility"),
-                    allowedTools = values.stringLikeValue("allowed-tools"),
-                    argumentHint = values.stringLikeValue("argument-hint"),
-                    userInvocable = values.booleanValue("user-invocable") ?: true,
-                    disableModelInvocation = values.booleanValue("disable-model-invocation") ?: false,
-                    metadata = metadata,
-                )
-            ),
+            extras = extras,
         )
     )
 }
@@ -1840,6 +1852,19 @@ internal fun SkillsCatalogState.toMutatingCatalogState(
         isLoading = true,
         error = null,
     )
+}
+
+internal fun shouldRefreshCatalogSnapshot(
+    state: SkillsCatalogState,
+    workdir: String,
+    nowMs: Long = System.currentTimeMillis(),
+    ttlMs: Long = SKILL_CATALOG_REFRESH_TTL_MS,
+): Boolean {
+    if (state.refreshedAt == 0L) return true
+    if (state.workdir != workdir) return true
+    if (state.isLoading) return false
+    if (state.error != null) return true
+    return nowMs - state.refreshedAt >= ttlMs
 }
 
 internal fun buildSkillCommandRequest(
@@ -1992,7 +2017,10 @@ internal fun resolveUpdatedSkillSourceMetadata(
             sourceId = finalDirectoryName,
         )
     }
-    return existingMetadata.copy(sourceId = existingMetadata.sourceId ?: finalDirectoryName)
+    return existingMetadata.copy(
+        sourceId = existingMetadata.sourceId ?: finalDirectoryName,
+        hash = null,
+    )
 }
 
 internal fun shouldBackfillBundledSkillMetadata(
@@ -2105,6 +2133,7 @@ private fun localizedSkillParseError(reason: SkillInvalidReason): String {
         SkillInvalidReason.FrontmatterNotClosed -> "$SKILL_PACKAGE_FILE_NAME frontmatter is not closed"
         SkillInvalidReason.MissingName -> "$SKILL_PACKAGE_FILE_NAME frontmatter is missing name"
         SkillInvalidReason.MissingDescription -> "$SKILL_PACKAGE_FILE_NAME frontmatter is missing description"
+        SkillInvalidReason.NoActivationPath -> "$SKILL_PACKAGE_FILE_NAME must allow user or model invocation"
         is SkillInvalidReason.FailedToRead -> reason.detail
         is SkillInvalidReason.Other -> reason.message
     }
@@ -2281,11 +2310,21 @@ internal fun buildSkillImportPreview(
             directoryName = directoryName,
             name = frontmatter.name,
             description = frontmatter.description,
+            sourceId = buildImportedSkillSourceId(
+                directoryName = directoryName,
+                skillName = frontmatter.name,
+                archiveName = archiveName,
+            ),
             version = frontmatter.version,
             author = frontmatter.author,
+            packageHash = computeSkillPackageHash(filesForSkill),
             scriptFiles = filesForSkill.count { it.path.startsWith("$directoryName/scripts/") },
             referenceFiles = filesForSkill.count { it.path.startsWith("$directoryName/references/") },
             assetFiles = filesForSkill.count { it.path.startsWith("$directoryName/assets/") },
+            scriptPaths = filesForSkill
+                .filter { it.path.startsWith("$directoryName/scripts/") }
+                .map { it.path.removePrefix("$directoryName/") }
+                .take(SKILL_IMPORT_PREVIEW_SCRIPT_LIST_LIMIT),
         )
     }
     val preview = SkillImportPreview(
@@ -2600,7 +2639,7 @@ private fun Any.toPromptString(): String? {
 private fun parseSkillSourceMetadata(raw: String): SkillSourceMetadata? {
     return runCatching {
         skillSourceMetadataJson.decodeFromString<SkillSourceMetadata>(raw)
-    }.getOrNull()
+    }.getOrNull()?.takeIf { it.schemaVersion <= SKILL_SOURCE_METADATA_SCHEMA_VERSION }
 }
 
 private fun computeSkillPackageHash(files: List<SkillArchiveFile>): String {
@@ -2620,4 +2659,34 @@ private fun shouldRetrySkillPreviewRead(reason: SkillInvalidReason): Boolean {
     return reason == SkillInvalidReason.FrontmatterNotClosed ||
         reason == SkillInvalidReason.MissingName ||
         reason == SkillInvalidReason.MissingDescription
+}
+
+private fun buildImportedSkillSourceMetadata(
+    directoryName: String,
+    previewEntry: SkillImportPreviewEntry?,
+    archiveName: String?,
+): SkillSourceMetadata {
+    return SkillSourceMetadata(
+        sourceType = SkillSourceType.IMPORTED,
+        sourceId = previewEntry?.sourceId ?: buildImportedSkillSourceId(
+            directoryName = directoryName,
+            skillName = directoryName,
+            archiveName = archiveName,
+        ),
+        version = previewEntry?.version,
+        hash = previewEntry?.packageHash,
+    )
+}
+
+private fun buildImportedSkillSourceId(
+    directoryName: String,
+    skillName: String,
+    archiveName: String?,
+): String {
+    return sanitizeSkillDirectoryName(
+        input = skillName.ifBlank {
+            archiveName?.substringBeforeLast('.', archiveName)?.ifBlank { directoryName } ?: directoryName
+        },
+        fallback = directoryName,
+    )
 }

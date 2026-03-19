@@ -10,6 +10,8 @@ import me.rerere.rikkahub.data.model.Assistant
 private val ExplicitSkillMentionRegex = Regex(
     """(^|[\s(\[{<"'`])([/@])([A-Za-z0-9](?:[A-Za-z0-9._-]*[A-Za-z0-9])?)(?!/[A-Za-z0-9._-])(?!\.[A-Za-z0-9])(?=$|[\s)\]}>."'`,!?;:])"""
 )
+private const val ACTIVATED_SKILL_MARKDOWN_CHAR_LIMIT = 12_000
+private const val ACTIVATED_SKILL_RESOURCE_FILE_LIMIT = 32
 
 internal fun isSkillsRuntimeAvailable(
     assistant: Assistant,
@@ -66,7 +68,8 @@ internal fun buildSkillsCatalogPrompt(
         appendLine("Skills root: ${catalog.rootPath}")
         appendLine("Each skill is a directory package. Only inspect a skill when it is relevant to the user's request.")
         appendLine("Do not read every SKILL.md preemptively.")
-        appendLine("If the user explicitly invokes a selected skill with `/skill-name` or `@skill-name`, activate it immediately for this request.")
+        appendLine("If the user explicitly invokes a selected skill with `@skill-name`, activate it immediately for this request.")
+        appendLine("`/skill-name` is also supported when it does not look like a filesystem path.")
         appendLine("When a skill is relevant, use the existing Termux tools to inspect files such as SKILL.md or run scripts inside that skill directory.")
         appendLine()
         appendLine("Available skills:")
@@ -119,6 +122,9 @@ internal fun buildActivatedSkillsPrompt(
     return buildString {
         appendLine("The following local skills were explicitly activated for this request.")
         appendLine("Treat their SKILL.md instructions as active guidance for this response.")
+        if (activations.any { !it.entry.allowedTools.isNullOrBlank() }) {
+            appendLine("Honor each activated skill's allowed-tools field as an enforced runtime policy for this request.")
+        }
         activations.forEach { activation ->
             appendLine()
             appendLine("<activated_skill>")
@@ -131,12 +137,13 @@ internal fun buildActivatedSkillsPrompt(
             appendLine("path: ${activation.entry.path}")
             appendLine("<skill_content>")
             appendLine("<![CDATA[")
-            appendLine(activation.markdown.trim().escapeForXmlCdata())
+            appendLine(activation.markdown.trim().truncateForSkillPrompt().escapeForXmlCdata())
             appendLine("]]>")
             appendLine("</skill_content>")
-            if (activation.resourceFiles.isNotEmpty()) {
+            val resourceFiles = activation.resourceFiles.take(ACTIVATED_SKILL_RESOURCE_FILE_LIMIT)
+            if (resourceFiles.isNotEmpty()) {
                 appendLine("<skill_resources>")
-                activation.resourceFiles.forEach { file ->
+                resourceFiles.forEach { file ->
                     appendLine("<file><![CDATA[${file.escapeForXmlCdata()}]]></file>")
                 }
                 appendLine("</skill_resources>")
@@ -147,3 +154,9 @@ internal fun buildActivatedSkillsPrompt(
 }
 
 private fun String.escapeForXmlCdata(): String = replace("]]>", "]]]]><![CDATA[>")
+
+private fun String.truncateForSkillPrompt(): String {
+    if (length <= ACTIVATED_SKILL_MARKDOWN_CHAR_LIMIT) return this
+    return take(ACTIVATED_SKILL_MARKDOWN_CHAR_LIMIT)
+        .trimEnd() + "\n\n[truncated]"
+}

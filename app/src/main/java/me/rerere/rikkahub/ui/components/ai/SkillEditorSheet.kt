@@ -169,6 +169,11 @@ internal fun SkillEditorSheet(
                     label = { Text(stringResource(R.string.assistant_page_skills_field_allowed_tools)) },
                     placeholder = { Text(stringResource(R.string.assistant_page_skills_field_allowed_tools_placeholder)) },
                 )
+                Text(
+                    text = stringResource(R.string.assistant_page_skills_field_allowed_tools_desc),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
                 OutlinedTextField(
                     modifier = Modifier.fillMaxWidth(),
                     value = draft.extras.argumentHint.orEmpty(),
@@ -266,6 +271,11 @@ internal fun SkillEditorSheet(
                         },
                     )
                 }
+                Text(
+                    text = stringResource(R.string.assistant_page_skills_option_activation_desc),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
             }
             Row(
                 modifier = Modifier.fillMaxWidth(),

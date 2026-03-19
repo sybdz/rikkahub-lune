@@ -1130,9 +1130,9 @@ mDNSアドレス: .localホスト名を使用し、IPを知らなくても同じ
   <string name="assistant_page_skills_root_fallback">workdir/skills</string>
   <string name="assistant_page_skills_selected_count">選択済み: %1$d</string>
   <string name="assistant_page_skills_termux_required_title">Termux ツールが必要です</string>
-  <string name="assistant_page_skills_termux_required_desc">チャットでスキルを使う前に、ローカルツール &gt; Termux Command を有効にしてください。</string>
+  <string name="assistant_page_skills_termux_required_desc">自動的なカタログ検出や Shell ベースのスキル処理には、ローカルツール &gt; Termux Command を有効にする必要があります。明示的な `@skill-name` 呼び出しではスキル説明は引き続き読み込まれます。</string>
   <string name="assistant_page_skills_model_unsupported_title">現在のモデルはツールを使用できません</string>
-  <string name="assistant_page_skills_model_unsupported_desc">選択内容は保存されますが、アクティブなモデルがツール呼び出しに対応するまではスキルカタログは注入されません。</string>
+  <string name="assistant_page_skills_model_unsupported_desc">選択内容は保存されますが、自動スキル検出はアクティブなモデルがツール呼び出しに対応するまで無効のままです。明示的な `@skill-name` 呼び出しではスキル説明は引き続き読み込まれます。</string>
   <string name="assistant_page_skills_refresh_failed_title">スキルの更新に失敗しました</string>
   <string name="assistant_page_skills_refreshing">%1$s からスキルを更新中</string>
   <string name="assistant_page_skills_empty_title">スキルが見つかりません</string>
@@ -1385,13 +1385,13 @@ mDNSアドレス: .localホスト名を使用し、IPを知らなくても同じ
   <string name="assistant_page_skills_field_license">ライセンス</string>
   <string name="assistant_page_skills_field_compatibility">互換性</string>
   <string name="assistant_page_skills_field_allowed_tools">許可されたツール</string>
-  <string name="assistant_page_skills_field_allowed_tools_placeholder">Bash 読み取り</string>
+  <string name="assistant_page_skills_field_allowed_tools_placeholder">Read, termux_python, get_time_info</string>
   <string name="assistant_page_skills_field_argument_hint">引数のヒント</string>
   <string name="assistant_page_skills_field_argument_hint_placeholder">&lt;path-to-project&gt;</string>
   <string name="assistant_page_skills_field_author">作者</string>
   <string name="assistant_page_skills_field_version">バージョン</string>
   <string name="assistant_page_skills_option_user_invocable_title">ユーザーが呼び出し可能</string>
-  <string name="assistant_page_skills_option_user_invocable_desc">`/skill-name` および `@skill-name` での呼び出しを許可</string>
+  <string name="assistant_page_skills_option_user_invocable_desc">`@skill-name` での呼び出しを許可します。パスと衝突しない場合は `/skill-name` も引き続き利用できます。</string>
   <string name="assistant_page_skills_option_disable_model_invocation_title">モデル呼び出しを無効にする</string>
   <string name="assistant_page_skills_option_disable_model_invocation_desc">自動起動ではなく、明示的な呼び出しを必要とします</string>
   <string name="assistant_page_skills_chip_count_skills">%1$d 件のスキル</string>
@@ -1405,4 +1405,11 @@ mDNSアドレス: .localホスト名を使用し、IPを知らなくても同じ
   <string name="assistant_page_skills_chip_auto_only">自動のみ</string>
   <string name="assistant_page_skills_chip_version">v%1$s</string>
   <string name="chat_input_attachment_fallback_file">ファイル</string>
+  <string name="assistant_page_skills_selected_breakdown">自動利用可能: %1$d • 明示呼び出しのみ: %2$d</string>
+  <string name="assistant_page_skills_reason_no_activation_path">SKILL.md はユーザー呼び出しまたはモデル呼び出しを許可する必要があります</string>
+  <string name="assistant_page_skills_import_preview_scripts_list">スクリプト:\n%1$s</string>
+  <string name="assistant_page_skills_field_allowed_tools_desc">明示的に有効化したスキルは、これらのツール制約を実行時に適用します。対応例: Read, Bash, termux_python, get_time_info, clipboard_tool.</string>
+  <string name="assistant_page_skills_option_activation_desc">少なくとも 1 つの有効化経路を残す必要があります。ユーザー呼び出しをオフにするとこのスキルは自動専用になるため、同時にモデル呼び出しもオフにはできません。</string>
+  <string name="assistant_page_skills_chip_manual_only">手動のみ</string>
 </resources>
+

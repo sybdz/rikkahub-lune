@@ -5,6 +5,7 @@ import java.io.ByteArrayOutputStream
 import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -83,6 +84,40 @@ class SkillsRepositoryTest {
         assertTrue(loading.invalidEntries.isEmpty())
         assertTrue(loading.isLoading)
         assertNull(loading.error)
+    }
+
+    @Test
+    fun `shouldRefreshCatalogSnapshot should use ttl and workdir`() {
+        val state = SkillsCatalogState(
+            workdir = "/termux",
+            rootPath = "/termux/skills",
+            refreshedAt = 1_000L,
+        )
+
+        assertFalse(
+            shouldRefreshCatalogSnapshot(
+                state = state,
+                workdir = "/termux",
+                nowMs = 30_000L,
+                ttlMs = 60_000L,
+            )
+        )
+        assertTrue(
+            shouldRefreshCatalogSnapshot(
+                state = state,
+                workdir = "/termux",
+                nowMs = 80_000L,
+                ttlMs = 60_000L,
+            )
+        )
+        assertTrue(
+            shouldRefreshCatalogSnapshot(
+                state = state,
+                workdir = "/other",
+                nowMs = 2_000L,
+                ttlMs = 60_000L,
+            )
+        )
     }
 
     @Test
@@ -301,6 +336,25 @@ class SkillsRepositoryTest {
         assertEquals(SkillSourceType.LOCAL, resolved.sourceType)
         assertEquals("skill-creator", resolved.sourceId)
         assertNull(resolved.hash)
+    }
+
+    @Test
+    fun `resolveUpdatedSkillSourceMetadata should clear imported hash after local edits`() {
+        val resolved = resolveUpdatedSkillSourceMetadata(
+            existingMetadata = SkillSourceMetadata(
+                sourceType = SkillSourceType.IMPORTED,
+                sourceId = "demo-skill",
+                hash = "abc123",
+                version = "1.0.0",
+            ),
+            originalDirectoryName = "demo-skill",
+            finalDirectoryName = "demo-skill",
+        )
+
+        assertEquals(SkillSourceType.IMPORTED, resolved.sourceType)
+        assertEquals("demo-skill", resolved.sourceId)
+        assertNull(resolved.hash)
+        assertEquals("1.0.0", resolved.version)
     }
 
     @Test
@@ -534,9 +588,13 @@ class SkillsRepositoryTest {
         assertEquals(1, preview.scriptFiles)
         assertEquals(1, preview.assetFiles)
         assertTrue(preview.hasScripts)
-        assertEquals("Demo Skill", preview.entries.single().name)
-        assertEquals("tester", preview.entries.single().author)
-        assertEquals("2.0.0", preview.entries.single().version)
+        val entry = preview.entries.single()
+        assertEquals("Demo Skill", entry.name)
+        assertEquals("tester", entry.author)
+        assertEquals("2.0.0", entry.version)
+        assertEquals("demo-skill", entry.sourceId)
+        assertNotNull(entry.packageHash)
+        assertEquals(listOf("scripts/run.sh"), entry.scriptPaths)
     }
 
     @Test

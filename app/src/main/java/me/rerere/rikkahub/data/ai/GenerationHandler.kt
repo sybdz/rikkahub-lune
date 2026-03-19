@@ -13,7 +13,6 @@ import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
-import me.rerere.ai.core.MessageRole
 import me.rerere.ai.core.Tool
 import me.rerere.ai.core.merge
 import me.rerere.ai.provider.CustomBody
@@ -42,12 +41,13 @@ import me.rerere.rikkahub.data.datastore.findProvider
 import me.rerere.rikkahub.data.model.Assistant
 import me.rerere.rikkahub.data.model.AssistantMemory
 import me.rerere.rikkahub.data.skills.SkillsRepository
+import me.rerere.rikkahub.data.skills.SkillToolPolicy
 import me.rerere.rikkahub.data.skills.buildActivatedSkillsPrompt
 import me.rerere.rikkahub.data.skills.buildSkillsCatalogPrompt
 import me.rerere.rikkahub.data.skills.resolveExplicitSkillInvocations
 import me.rerere.rikkahub.data.skills.resolveSelectedSkillEntries
+import me.rerere.rikkahub.data.skills.resolveSkillToolPolicy
 import me.rerere.rikkahub.data.skills.shouldLoadExplicitSkillActivations
-import me.rerere.rikkahub.data.skills.shouldInjectSkillsCatalog
 import me.rerere.rikkahub.data.repository.ConversationRepository
 import me.rerere.rikkahub.data.repository.MemoryRepository
 import me.rerere.rikkahub.utils.applyPlaceholders
@@ -59,6 +59,12 @@ private const val TAG = "GenerationHandler"
 internal data class ToolApprovalPassResult(
     val tools: List<UIMessagePart.Tool>,
     val hasPendingApproval: Boolean,
+)
+
+private data class SkillRequestContext(
+    val catalogPrompt: String? = null,
+    val activatedPrompt: String? = null,
+    val toolPolicy: SkillToolPolicy = SkillToolPolicy(),
 )
 
 @Serializable
@@ -96,7 +102,13 @@ class GenerationHandler(
         for (stepIndex in 0 until maxSteps) {
             Log.i(TAG, "streamText: start step #$stepIndex (${model.id})")
 
-            val toolsInternal = buildList {
+            val skillRequestContext = resolveSkillRequestContext(
+                assistant = assistant,
+                settings = settings,
+                model = model,
+                messages = messages,
+            )
+            val allToolsInternal = buildList {
                 Log.i(TAG, "generateInternal: build tools($assistant)")
                 if (assistant.enableMemory) {
                     val memoryAssistantId = if (assistant.useGlobalMemory) {
@@ -119,6 +131,7 @@ class GenerationHandler(
                 }
                 addAll(tools)
             }
+            val generationTools = skillRequestContext.toolPolicy.filterVisibleTools(allToolsInternal)
 
             // Check if we have approved tool calls to execute (resuming after approval)
             val pendingTools = messages.lastOrNull()?.getTools()?.filter {
@@ -157,8 +170,9 @@ class GenerationHandler(
                     model = model,
                     providerImpl = providerImpl,
                     provider = provider,
-                    tools = toolsInternal,
+                    tools = generationTools,
                     memories = memories ?: emptyList(),
+                    skillRequestContext = skillRequestContext,
                     stream = assistant.streamOutput
                 )
                 messages = messages.visualTransforms(
@@ -193,7 +207,7 @@ class GenerationHandler(
                 )
                 val approvalPass = evaluatePendingToolApprovals(
                     tools = tools,
-                    toolsInternal = toolsInternal,
+                    toolsInternal = generationTools,
                     blacklistRules = blacklistRules,
                 )
                 val updatedTools = approvalPass.tools
@@ -267,11 +281,26 @@ class GenerationHandler(
                     else -> {
                         // Auto or Approved - execute the tool
                         runCatching {
-                            val toolDef = toolsInternal.find { toolDef -> toolDef.name == tool.toolName }
+                            val toolDef = allToolsInternal.find { toolDef -> toolDef.name == tool.toolName }
                                 ?: error("Tool ${tool.toolName} not found")
                             val args = json.parseToJsonElement(tool.input.ifBlank { "{}" })
+                            skillRequestContext.toolPolicy.validate(
+                                toolName = tool.toolName,
+                                input = args,
+                            )?.let { violation ->
+                                return@runCatching listOf(
+                                    UIMessagePart.Text(
+                                        json.encodeToString(
+                                            buildJsonObject {
+                                                put("error", JsonPrimitive(violation.message))
+                                            }
+                                        )
+                                    )
+                                )
+                            }
                             Log.i(TAG, "generateText: executing tool ${toolDef.name} with args: $args")
-                            val result = toolDef.execute(args)
+                            toolDef.execute(args)
+                        }.onSuccess { result ->
                             executedTools += tool.copy(output = result)
                         }.onFailure {
                             it.printStackTrace()
@@ -336,29 +365,9 @@ class GenerationHandler(
         provider: ProviderSetting,
         tools: List<Tool>,
         memories: List<AssistantMemory>,
+        skillRequestContext: SkillRequestContext,
         stream: Boolean
     ) {
-        val shouldRefreshSkills = assistant.skillsEnabled && assistant.selectedSkills.isNotEmpty()
-        val skillsCatalog = skillsRepository.getCatalogSnapshot(
-            forceRefresh = shouldRefreshSkills,
-            workdir = settings.termuxWorkdir,
-        )
-        val activatedSkillsPrompt = if (shouldLoadExplicitSkillActivations(assistant)) {
-            val explicitSkillInvocations = resolveExplicitSkillInvocations(
-                messages = messages,
-                availableSkills = resolveSelectedSkillEntries(
-                    selectedSkills = assistant.selectedSkills,
-                    availableSkills = skillsCatalog.entries,
-                ),
-            )
-            buildActivatedSkillsPrompt(
-                skillsRepository.loadSkillActivations(
-                    explicitSkillInvocations.map { it.directoryName }
-                )
-            )
-        } else {
-            null
-        }
         val internalMessages = buildList {
             val system = buildString {
                 // 如果助手有系统提示，则添加到消息中
@@ -376,15 +385,11 @@ class GenerationHandler(
                     append(buildRecentChatsPrompt(assistant, conversationRepo))
                 }
 
-                buildSkillsCatalogPrompt(
-                    assistant = assistant,
-                    model = model,
-                    catalog = skillsCatalog,
-                )?.let {
+                skillRequestContext.catalogPrompt?.let {
                     appendLine()
                     append(it)
                 }
-                activatedSkillsPrompt?.let {
+                skillRequestContext.activatedPrompt?.let {
                     appendLine()
                     append(it)
                 }
@@ -477,6 +482,48 @@ class GenerationHandler(
             }
             onUpdateMessages(messages)
         }
+    }
+
+    private suspend fun resolveSkillRequestContext(
+        assistant: Assistant,
+        settings: Settings,
+        model: Model,
+        messages: List<UIMessage>,
+    ): SkillRequestContext {
+        if (!assistant.skillsEnabled || assistant.selectedSkills.isEmpty()) {
+            return SkillRequestContext()
+        }
+
+        val skillsCatalog = skillsRepository.getCatalogSnapshot(
+            workdir = settings.termuxWorkdir,
+        )
+        val selectedEntries = resolveSelectedSkillEntries(
+            selectedSkills = assistant.selectedSkills,
+            availableSkills = skillsCatalog.entries,
+        )
+        val explicitSkillInvocations = if (shouldLoadExplicitSkillActivations(assistant)) {
+            resolveExplicitSkillInvocations(
+                messages = messages,
+                availableSkills = selectedEntries,
+            )
+        } else {
+            emptyList()
+        }
+        val activations = if (explicitSkillInvocations.isEmpty()) {
+            emptyList()
+        } else {
+            skillsRepository.loadSkillActivations(explicitSkillInvocations.map { it.directoryName })
+        }
+
+        return SkillRequestContext(
+            catalogPrompt = buildSkillsCatalogPrompt(
+                assistant = assistant,
+                model = model,
+                catalog = skillsCatalog,
+            ),
+            activatedPrompt = buildActivatedSkillsPrompt(activations),
+            toolPolicy = resolveSkillToolPolicy(activations),
+        )
     }
 
     fun translateText(

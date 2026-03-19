@@ -202,6 +202,16 @@ private fun SkillImportPreviewCard(entry: SkillImportPreviewEntry) {
                     SkillMetaChip(label = stringResource(R.string.assistant_page_skills_chip_count_assets, entry.assetFiles))
                 }
             }
+            if (entry.scriptPaths.isNotEmpty()) {
+                Text(
+                    text = stringResource(
+                        R.string.assistant_page_skills_import_preview_scripts_list,
+                        entry.scriptPaths.joinToString(separator = "\n"),
+                    ),
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
         }
     }
 }
@@ -262,6 +272,8 @@ private fun SkillEntryCard(
                     entry.author?.let { SkillMetaChip(label = it) }
                     if (!entry.userInvocable) {
                         SkillMetaChip(label = stringResource(R.string.assistant_page_skills_chip_auto_only))
+                    } else if (!entry.modelInvocable) {
+                        SkillMetaChip(label = stringResource(R.string.assistant_page_skills_chip_manual_only))
                     }
                 }
                 Text(
@@ -363,6 +375,9 @@ private fun localizedSkillInvalidReason(reason: SkillInvalidReason): String {
         SkillInvalidReason.MissingName -> stringResource(R.string.assistant_page_skills_reason_missing_name)
         SkillInvalidReason.MissingDescription -> stringResource(
             R.string.assistant_page_skills_reason_missing_description
+        )
+        SkillInvalidReason.NoActivationPath -> stringResource(
+            R.string.assistant_page_skills_reason_no_activation_path
         )
         is SkillInvalidReason.FailedToRead -> stringResource(
             R.string.assistant_page_skills_reason_failed_to_read,

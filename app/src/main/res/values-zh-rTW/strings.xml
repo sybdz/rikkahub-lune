@@ -1129,9 +1129,9 @@
   <string name="assistant_page_skills_selected_count">已選取：%1$d</string>
   <string name="assistant_page_skills_action_desc">在 %1$s 中建立新的技能樣板，或匯入 zip 技能包。</string>
   <string name="assistant_page_skills_termux_required_title">需要 Termux 工具</string>
-  <string name="assistant_page_skills_termux_required_desc">在聊天中使用技能前，請先啟用 本地工具 &gt; Termux 指令。</string>
+  <string name="assistant_page_skills_termux_required_desc">自動發現技能目錄與依賴 Shell 的技能流程需要啟用 本地工具 &gt; Termux 指令。顯式 `@skill-name` 仍會載入技能說明。</string>
   <string name="assistant_page_skills_model_unsupported_title">目前模型無法使用工具</string>
-  <string name="assistant_page_skills_model_unsupported_desc">選取項目會被保存，但在目前模型支援工具呼叫之前，技能目錄不會注入到上下文中。</string>
+  <string name="assistant_page_skills_model_unsupported_desc">選取項目會被保存，但在目前模型支援工具呼叫前，自動技能發現不會啟用。顯式 `@skill-name` 仍會載入技能說明。</string>
   <string name="assistant_page_skills_refresh_failed_title">重新整理技能失敗</string>
   <string name="assistant_page_skills_refreshing">正在從 %1$s 重新整理技能</string>
   <string name="assistant_page_skills_empty_title">找不到技能</string>
@@ -1377,13 +1377,13 @@
   <string name="assistant_page_skills_field_license">授權條款</string>
   <string name="assistant_page_skills_field_compatibility">相容性</string>
   <string name="assistant_page_skills_field_allowed_tools">允許的工具</string>
-  <string name="assistant_page_skills_field_allowed_tools_placeholder">Bash Read</string>
+  <string name="assistant_page_skills_field_allowed_tools_placeholder">Read, termux_python, get_time_info</string>
   <string name="assistant_page_skills_field_argument_hint">參數提示</string>
   <string name="assistant_page_skills_field_argument_hint_placeholder">&lt;專案路徑&gt;</string>
   <string name="assistant_page_skills_field_author">作者</string>
   <string name="assistant_page_skills_field_version">版本</string>
   <string name="assistant_page_skills_option_user_invocable_title">使用者可觸發</string>
-  <string name="assistant_page_skills_option_user_invocable_desc">允許透過 `/skill-name` 和 `@skill-name` 呼叫</string>
+  <string name="assistant_page_skills_option_user_invocable_desc">允許透過 `@skill-name` 呼叫；當不與路徑衝突時，`/skill-name` 也仍可使用。</string>
   <string name="assistant_page_skills_option_disable_model_invocation_title">停用模型呼叫</string>
   <string name="assistant_page_skills_option_disable_model_invocation_desc">需要明確呼叫，而非自動觸發</string>
   <string name="assistant_page_skills_chip_count_skills">%1$d 項技能</string>
@@ -1397,4 +1397,11 @@
   <string name="assistant_page_skills_chip_auto_only">僅限自動呼叫</string>
   <string name="assistant_page_skills_chip_version">v%1$s</string>
   <string name="chat_input_attachment_fallback_file">檔案</string>
+  <string name="assistant_page_skills_selected_breakdown">可自動發現：%1$d · 僅顯式呼叫：%2$d</string>
+  <string name="assistant_page_skills_reason_no_activation_path">SKILL.md 必須允許使用者或模型呼叫</string>
+  <string name="assistant_page_skills_import_preview_scripts_list">腳本：\n%1$s</string>
+  <string name="assistant_page_skills_field_allowed_tools_desc">顯式啟用的技能會在執行時套用這些工具限制。支援示例：Read、Bash、termux_python、get_time_info、clipboard_tool。</string>
+  <string name="assistant_page_skills_option_activation_desc">至少要保留一種啟動方式。關閉使用者呼叫後，該技能會變成僅自動呼叫，因此不能同時關閉模型呼叫。</string>
+  <string name="assistant_page_skills_chip_manual_only">僅手動呼叫</string>
 </resources>
+

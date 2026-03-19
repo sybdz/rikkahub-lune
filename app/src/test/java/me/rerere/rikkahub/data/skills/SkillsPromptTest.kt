@@ -33,7 +33,7 @@ class SkillsPromptTest {
     }
 
     @Test
-    fun `parseSkillFrontmatter should normalize optional activation metadata`() {
+    fun `parseSkillFrontmatter should preserve optional activation metadata`() {
         val markdown = """
             ---
             name: webapp-testing
@@ -43,7 +43,6 @@ class SkillsPromptTest {
               - Read
             argument-hint: "<path-to-project>"
             user-invocable: false
-            disable-model-invocation: true
             metadata:
               author: anthropic
               version: "1.0.0"
@@ -58,6 +57,26 @@ class SkillsPromptTest {
         assertTrue(result.frontmatter.modelInvocable)
         assertEquals("anthropic", result.frontmatter.author)
         assertEquals("1.0.0", result.frontmatter.version)
+    }
+
+    @Test
+    fun `parseSkillFrontmatter should reject skills without any activation path`() {
+        val markdown = """
+            ---
+            name: webapp-testing
+            description: Test local web applications with Playwright
+            user-invocable: false
+            disable-model-invocation: true
+            ---
+        """.trimIndent()
+
+        val result = parseSkillFrontmatter(markdown)
+
+        assertTrue(result is SkillFrontmatterParseResult.Error)
+        assertEquals(
+            SkillInvalidReason.NoActivationPath,
+            (result as SkillFrontmatterParseResult.Error).reason,
+        )
     }
 
     @Test
@@ -364,5 +383,6 @@ class SkillsPromptTest {
         assertTrue(prompt.contains("<skill_content>"))
         assertTrue(prompt.contains("<![CDATA["))
         assertTrue(prompt.contains("]]]]><![CDATA[>"))
+        assertTrue(prompt.contains("allowed-tools field as an enforced runtime policy"))
     }
 }

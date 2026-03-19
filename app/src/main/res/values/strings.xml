@@ -1151,11 +1151,12 @@
   <string name="assistant_page_skills_root_unresolved">(not resolved)</string>
   <string name="assistant_page_skills_root_fallback">workdir/skills</string>
   <string name="assistant_page_skills_selected_count">Selected: %1$d</string>
+  <string name="assistant_page_skills_selected_breakdown">Auto-ready: %1$d • Explicit-only: %2$d</string>
   <string name="assistant_page_skills_action_desc">Create a new skill scaffold or import a zip skill package into %1$s.</string>
   <string name="assistant_page_skills_termux_required_title">Termux tool required</string>
-  <string name="assistant_page_skills_termux_required_desc">Enable Local Tools &gt; Termux Command before using skills in chat.</string>
+  <string name="assistant_page_skills_termux_required_desc">Enable Local Tools &gt; Termux Command for automatic catalog discovery and shell-backed skill workflows. Explicit `@skill-name` activation still loads skill instructions.</string>
   <string name="assistant_page_skills_model_unsupported_title">Current model cannot use tools</string>
-  <string name="assistant_page_skills_model_unsupported_desc">Selections are saved, but the skills catalog will not be injected until the active model supports tool calls.</string>
+  <string name="assistant_page_skills_model_unsupported_desc">Selections are saved, but automatic skill discovery stays off until the active model supports tool calls. Explicit `@skill-name` activation still loads skill instructions.</string>
   <string name="assistant_page_skills_refresh_failed_title">Failed to refresh skills</string>
   <string name="assistant_page_skills_refreshing">Refreshing skills from %1$s</string>
   <string name="assistant_page_skills_empty_title">No skills found</string>
@@ -1196,6 +1197,7 @@
   <string name="assistant_page_skills_reason_frontmatter_not_closed">SKILL.md frontmatter is not closed</string>
   <string name="assistant_page_skills_reason_missing_name">SKILL.md frontmatter is missing name</string>
   <string name="assistant_page_skills_reason_missing_description">SKILL.md frontmatter is missing description</string>
+  <string name="assistant_page_skills_reason_no_activation_path">SKILL.md must allow user or model invocation</string>
   <string name="assistant_page_skills_reason_failed_to_read">Failed to read SKILL.md: %1$s</string>
   <string name="setting_display_page_tool_approval_notification">Tool Approval Notification</string>
   <string name="setting_display_page_tool_approval_notification_desc">Play a notification sound when a tool call is waiting for approval</string>
@@ -1379,19 +1381,22 @@
   <string name="assistant_page_skills_import_preview_summary">This package will install %1$d skill(s) and %2$d file(s).</string>
   <string name="assistant_page_skills_import_preview_review_title">Review required</string>
   <string name="assistant_page_skills_import_preview_review_desc">This package contains executable scripts. Check the listed skills before importing.</string>
+  <string name="assistant_page_skills_import_preview_scripts_list">Scripts:\n%1$s</string>
   <string name="assistant_page_skills_install">Install</string>
   <string name="assistant_page_skills_field_license">License</string>
   <string name="assistant_page_skills_field_compatibility">Compatibility</string>
   <string name="assistant_page_skills_field_allowed_tools">Allowed Tools</string>
-  <string name="assistant_page_skills_field_allowed_tools_placeholder">Bash Read</string>
+  <string name="assistant_page_skills_field_allowed_tools_placeholder">Read, termux_python, get_time_info</string>
+  <string name="assistant_page_skills_field_allowed_tools_desc">Explicitly activated skills enforce these tool hints at runtime. Supported examples: Read, Bash, termux_python, get_time_info, clipboard_tool.</string>
   <string name="assistant_page_skills_field_argument_hint">Argument Hint</string>
   <string name="assistant_page_skills_field_argument_hint_placeholder">&lt;path-to-project&gt;</string>
   <string name="assistant_page_skills_field_author">Author</string>
   <string name="assistant_page_skills_field_version">Version</string>
   <string name="assistant_page_skills_option_user_invocable_title">User Invocable</string>
-  <string name="assistant_page_skills_option_user_invocable_desc">Allow `/skill-name` and `@skill-name` invocation</string>
+  <string name="assistant_page_skills_option_user_invocable_desc">Allow `@skill-name` invocation. `/skill-name` is still supported when it does not look like a path.</string>
   <string name="assistant_page_skills_option_disable_model_invocation_title">Disable Model Invocation</string>
   <string name="assistant_page_skills_option_disable_model_invocation_desc">Require explicit invocation instead of automatic triggering</string>
+  <string name="assistant_page_skills_option_activation_desc">At least one activation path must stay enabled. Turning off user invocation keeps the skill auto-only, so model invocation cannot be disabled at the same time.</string>
   <string name="assistant_page_skills_chip_count_skills">%1$d skill(s)</string>
   <string name="assistant_page_skills_chip_count_files">%1$d file(s)</string>
   <string name="assistant_page_skills_chip_count_scripts">%1$d script(s)</string>
@@ -1401,7 +1406,7 @@
   <string name="assistant_page_skills_chip_imported">Imported</string>
   <string name="assistant_page_skills_chip_local">Local</string>
   <string name="assistant_page_skills_chip_auto_only">Auto-only</string>
+  <string name="assistant_page_skills_chip_manual_only">Manual-only</string>
   <string name="assistant_page_skills_chip_version">v%1$s</string>
   <string name="chat_input_attachment_fallback_file">File</string>
 </resources>
-

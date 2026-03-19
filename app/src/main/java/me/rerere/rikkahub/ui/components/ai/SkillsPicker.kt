@@ -157,7 +157,7 @@ fun SkillsPickerButton(
                     assistant = assistant,
                     skillsState = skillsState,
                     modelSupportsTools = modelSupportsTools,
-                    onRefresh = { skillsRepository.requestRefresh() },
+                    onRefresh = { skillsRepository.requestRefresh(force = true) },
                     onUpdateAssistant = onUpdateAssistant,
                     modifier = Modifier
                         .fillMaxWidth()
@@ -226,6 +226,15 @@ fun SkillsPicker(
     }
     val localEntries = remember(skillsState.entries) {
         skillsState.entries.filter { !it.isBundled && it.sourceType != SkillSourceType.IMPORTED }
+    }
+    val selectedExistingEntries = remember(assistant.selectedSkills, skillsState.entries) {
+        skillsState.entries.filter { it.directoryName in assistant.selectedSkills }
+    }
+    val autoSelectedCount = remember(selectedExistingEntries) {
+        selectedExistingEntries.count { it.modelInvocable }
+    }
+    val manualOnlySelectedCount = remember(selectedExistingEntries) {
+        selectedExistingEntries.count { !it.modelInvocable && it.userInvocable }
     }
 
     fun resetCreateDialog() {
@@ -362,15 +371,28 @@ fun SkillsPicker(
                         modifier = Modifier.fillMaxWidth(),
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
-                        Text(
-                            text = stringResource(
-                                R.string.assistant_page_skills_selected_count,
-                                assistant.selectedSkills.size,
-                            ),
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
-                        Box(modifier = Modifier.weight(1f))
+                        Column(
+                            modifier = Modifier.weight(1f),
+                            verticalArrangement = Arrangement.spacedBy(2.dp),
+                        ) {
+                            Text(
+                                text = stringResource(
+                                    R.string.assistant_page_skills_selected_count,
+                                    assistant.selectedSkills.size,
+                                ),
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                            Text(
+                                text = stringResource(
+                                    R.string.assistant_page_skills_selected_breakdown,
+                                    autoSelectedCount,
+                                    manualOnlySelectedCount,
+                                ),
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
                         TextButton(
                             enabled = !actionInProgress,
                             onClick = onRefresh,
