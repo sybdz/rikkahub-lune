@@ -16,6 +16,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
+import androidx.compose.foundation.gestures.waitForUpOrCancellation
 import androidx.compose.foundation.gestures.scrollBy
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -126,7 +127,7 @@ private const val TAG = "ChatList"
 private const val LoadingIndicatorKey = "LoadingIndicator"
 private const val ScrollBottomKey = "ScrollBottomKey"
 
-private fun Modifier.clearChatInputFocusOnPress(
+private fun Modifier.clearChatInputFocusOnTap(
     onDismiss: () -> Unit,
 ): Modifier = pointerInput(onDismiss) {
     awaitEachGesture {
@@ -134,7 +135,9 @@ private fun Modifier.clearChatInputFocusOnPress(
             requireUnconsumed = false,
             pass = PointerEventPass.Initial,
         )
-        onDismiss()
+        if (waitForUpOrCancellation(pass = PointerEventPass.Initial) != null) {
+            onDismiss()
+        }
     }
 }
 
@@ -328,7 +331,7 @@ private fun ChatListNormal(
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .clearChatInputFocusOnPress {
+            .clearChatInputFocusOnTap {
                 focusManager.clearFocus(force = true)
                 keyboardController?.hide()
             }
@@ -820,7 +823,7 @@ private fun ChatListPreview(
             modifier = Modifier
                 .fillMaxWidth()
                 .weight(1f)
-                .clearChatInputFocusOnPress {
+                .clearChatInputFocusOnTap {
                     focusManager.clearFocus(force = true)
                     keyboardController?.hide()
                 },
