@@ -102,3 +102,9 @@
 - Codex does not need per-task confirmation to spawn sub-agents for exploration, implementation, or verification work.
 - Codex should still avoid unnecessary delegation when the task is small, tightly coupled, or on the critical path.
 - If the user does not explicitly specify a sub-agent model, Codex must default to `gpt-5.4` with `xhigh` reasoning effort for sub-agents.
+
+## GitHub Publishing Safety
+
+- If both `origin` and `upstream` remotes exist, treat `origin` as the default push target unless the user explicitly names a different remote.
+- Do not open pull requests against `upstream` unless the user explicitly asks to create a PR and clearly approves `upstream` as the target repository.
+- A request to “push” only means pushing commits/branches to the chosen remote. It must not be expanded into opening a pull request.
