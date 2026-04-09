@@ -768,6 +768,13 @@ private fun GenericToolPreview(
                             isError = termuxPreview.isError,
                             modifier = Modifier.fillMaxWidth(),
                         )
+                        output.filterIsInstance<UIMessagePart.Image>().forEach { image ->
+                            ZoomableAsyncImage(
+                                model = image.url,
+                                contentDescription = null,
+                                modifier = Modifier.fillMaxWidth(),
+                            )
+                        }
                     } else {
                         output.fastForEach { part ->
                             when (part) {

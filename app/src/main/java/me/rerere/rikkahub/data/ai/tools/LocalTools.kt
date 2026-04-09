@@ -31,12 +31,14 @@ import me.rerere.rikkahub.data.ai.tools.termux.TermuxPtySessionManager
 import me.rerere.rikkahub.data.ai.tools.termux.TermuxRunCommandRequest
 import me.rerere.rikkahub.data.ai.tools.termux.TermuxPtyToolResponse
 import me.rerere.rikkahub.data.ai.tools.termux.encode
+import me.rerere.rikkahub.data.ai.tools.termux.toMessageParts
 import me.rerere.rikkahub.data.ai.tools.termux.toCommandErrorToolResponse
 import me.rerere.rikkahub.data.ai.tools.termux.toPtyErrorToolResponse
 import me.rerere.rikkahub.data.ai.tools.termux.toToolResponse
 import me.rerere.rikkahub.data.datastore.SettingsStore
 import me.rerere.rikkahub.data.event.AppEvent
 import me.rerere.rikkahub.data.event.AppEventBus
+import me.rerere.rikkahub.data.files.FilesManager
 import me.rerere.rikkahub.utils.readClipboardText
 import me.rerere.rikkahub.utils.writeClipboardText
 import java.time.ZonedDateTime
@@ -81,6 +83,7 @@ class LocalTools(
     private val termuxCommandManager: TermuxCommandManager,
     private val termuxPtySessionManager: TermuxPtySessionManager,
     private val eventBus: AppEventBus,
+    private val filesManager: FilesManager,
 ) {
     val javascriptTool by lazy {
         Tool(
@@ -451,7 +454,10 @@ class LocalTools(
                             )
                         )
                     }
-                    return@execute listOf(UIMessagePart.Text(response.toToolResponse().encode(json)))
+                    return@execute response.toToolResponse().toMessageParts(
+                        json = json,
+                        filesManager = filesManager,
+                    )
                 }
 
                 val timeoutMs = (params.optionalLong("timeout_ms") ?: settings.termuxTimeoutMs)
@@ -475,7 +481,10 @@ class LocalTools(
                     )
                 }
 
-                listOf(UIMessagePart.Text(result.toToolResponse().encode(json)))
+                result.toToolResponse().toMessageParts(
+                    json = json,
+                    filesManager = filesManager,
+                )
             }
         )
     }
@@ -541,7 +550,10 @@ class LocalTools(
                     )
                 }
 
-                listOf(UIMessagePart.Text(response.toToolResponse().encode(json)))
+                response.toToolResponse().toMessageParts(
+                    json = json,
+                    filesManager = filesManager,
+                )
             }
         )
     }
@@ -681,7 +693,10 @@ class LocalTools(
                     )
                 }
 
-                listOf(UIMessagePart.Text(termuxResult.toToolResponse().encode(json)))
+                termuxResult.toToolResponse().toMessageParts(
+                    json = json,
+                    filesManager = filesManager,
+                )
             }
         )
     }

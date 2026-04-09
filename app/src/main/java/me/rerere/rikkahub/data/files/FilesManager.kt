@@ -112,6 +112,24 @@ class FilesManager(
         )
     }
 
+    suspend fun createChatImagePartFromBytes(
+        bytes: ByteArray,
+        mimeType: String = "image/png",
+        displayName: String? = null,
+    ): UIMessagePart.Image = withContext(Dispatchers.IO) {
+        val resolvedMimeType = normalizeImageMimeType(mimeType)
+        val resolvedDisplayName = displayName
+            ?: "termux-output.${extensionFromMimeType(resolvedMimeType)}"
+        val entity = saveUploadFromBytes(
+            bytes = bytes,
+            displayName = resolvedDisplayName,
+            mimeType = resolvedMimeType,
+        )
+        UIMessagePart.Image(
+            url = context.filesDir.resolve(entity.relativePath).toUri().toString(),
+        )
+    }
+
     fun observe(folder: String = FileFolders.UPLOAD): Flow<List<ManagedFileEntity>> =
         repository.listByFolder(folder)
 
