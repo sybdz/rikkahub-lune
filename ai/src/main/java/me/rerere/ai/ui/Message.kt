@@ -319,12 +319,39 @@ fun List<UIMessage>.limitContext(size: Int): List<UIMessage> {
 
         // 如果当前消息包含已执行的tool（有output），往前查找对应的tool call
         if (currentMessage.getTools().any { it.isExecuted }) {
+            val executedToolIds = currentMessage.getTools()
+                .filter { it.isExecuted && it.toolCallId.isNotBlank() }
+                .map { it.toolCallId }
+                .toSet()
+            var foundMatchingToolCall = false
+
             for (i in adjustedStartIndex - 1 downTo 0) {
-                if (this[i].getTools().any { !it.isExecuted }) {
+                if (this[i].getTools().any { tool ->
+                        !tool.isExecuted && (executedToolIds.isEmpty() || tool.toolCallId in executedToolIds)
+                    }
+                ) {
+                    adjustedStartIndex = i
+                    needsAdjustment = true
+                    foundMatchingToolCall = true
+                    break
+                }
+            }
+
+            if (foundMatchingToolCall) {
+                continue
+            }
+
+            // Modern tool flows may keep the tool call and executed output in the same assistant message.
+            for (i in adjustedStartIndex - 1 downTo 0) {
+                if (this[i].role == MessageRole.USER) {
                     adjustedStartIndex = i
                     needsAdjustment = true
                     break
                 }
+            }
+
+            if (needsAdjustment) {
+                continue
             }
         }
 

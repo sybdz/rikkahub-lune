@@ -105,6 +105,28 @@ class MessageTest {
     }
 
     @Test
+    fun `limitContext with executed tool in same assistant message should include corresponding user message`() {
+        val messages = listOf(
+            UIMessage(role = MessageRole.USER, parts = listOf(UIMessagePart.Text("User query"))),
+            UIMessage(
+                role = MessageRole.ASSISTANT,
+                parts = listOf(
+                    UIMessagePart.Tool(
+                        toolCallId = "call1",
+                        toolName = "test_tool",
+                        input = "{}",
+                        output = listOf(UIMessagePart.Text("result"))
+                    ),
+                    UIMessagePart.Text("Intermediate response")
+                )
+            )
+        )
+
+        val result = messages.limitContext(1)
+        assertEquals(messages, result)
+    }
+
+    @Test
     fun `limitContext with legacy TOOL result at start should include corresponding tool call chain`() {
         val messages = listOf(
             UIMessage(role = MessageRole.USER, parts = listOf(UIMessagePart.Text("User query"))),

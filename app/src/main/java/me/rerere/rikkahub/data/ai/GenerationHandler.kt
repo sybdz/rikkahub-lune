@@ -67,6 +67,32 @@ sealed interface GenerationChunk {
     ) : GenerationChunk
 }
 
+internal fun List<UIMessage>.prepareMessagesForGeneration(
+    contextMessageSize: Int,
+    toolCallKeepRoundsLimit: Int?,
+): List<UIMessage> {
+    val contextLimitedMessages = limitContext(contextMessageSize)
+    if (toolCallKeepRoundsLimit == null || contextLimitedMessages.isEmpty()) {
+        return contextLimitedMessages
+    }
+
+    val lastMessage = contextLimitedMessages.last()
+    val isActiveToolChain = lastMessage.role == MessageRole.ASSISTANT && lastMessage.getTools().isNotEmpty()
+    if (!isActiveToolChain) {
+        return contextLimitedMessages.limitToolCallRounds(toolCallKeepRoundsLimit)
+    }
+
+    val currentTurnStartIndex = contextLimitedMessages.indexOfLast { it.role == MessageRole.USER }
+    if (currentTurnStartIndex <= 0) {
+        return contextLimitedMessages
+    }
+
+    // Keep the in-flight tool turn intact so the next model step still sees earlier tool outputs.
+    return contextLimitedMessages.subList(0, currentTurnStartIndex)
+        .limitToolCallRounds(toolCallKeepRoundsLimit) +
+        contextLimitedMessages.subList(currentTurnStartIndex, contextLimitedMessages.size)
+}
+
 class GenerationHandler(
     private val context: Context,
     private val providerManager: ProviderManager,
@@ -488,9 +514,10 @@ class GenerationHandler(
         lorebookRuntimeState: LorebookRuntimeState?,
         dryRun: Boolean = false,
     ): List<UIMessage> {
-        val preparedMessages = messages
-            .limitToolCallRounds(assistant.resolveToolCallKeepRoundsLimit())
-            .limitContext(assistant.contextMessageSize)
+        val preparedMessages = messages.prepareMessagesForGeneration(
+            contextMessageSize = assistant.contextMessageSize,
+            toolCallKeepRoundsLimit = assistant.resolveToolCallKeepRoundsLimit(),
+        )
 
         return buildList {
             val system = buildString {
