@@ -7,18 +7,16 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.material3.Card
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.Card
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
-import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Slider
 import androidx.compose.material3.SliderDefaults
 import androidx.compose.material3.Text
@@ -60,7 +58,6 @@ fun ReasoningButton(
     reasoningLevel: ReasoningLevel,
     onUpdateReasoningLevel: (ReasoningLevel) -> Unit,
     openAIReasoningEffort: String = "",
-    onUpdateOpenAIReasoningEffort: (String) -> Unit = {},
 ) {
     var showPicker by remember { mutableStateOf(false) }
 
@@ -70,7 +67,6 @@ fun ReasoningButton(
             openAIReasoningEffort = openAIReasoningEffort,
             onDismissRequest = { showPicker = false },
             onUpdateReasoningLevel = onUpdateReasoningLevel,
-            onUpdateOpenAIReasoningEffort = onUpdateOpenAIReasoningEffort,
         )
     }
 
@@ -101,7 +97,6 @@ fun ReasoningPicker(
     openAIReasoningEffort: String = "",
     onDismissRequest: () -> Unit = {},
     onUpdateReasoningLevel: (ReasoningLevel) -> Unit,
-    onUpdateOpenAIReasoningEffort: (String) -> Unit = {},
 ) {
     val currentIndex = levels.indexOf(reasoningLevel).coerceAtLeast(0)
     val notSent = stringResource(R.string.assistant_page_openai_reasoning_effort_not_sent)
@@ -226,9 +221,7 @@ fun ReasoningPicker(
             }
 
             Card(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .imePadding(),
+                modifier = Modifier.fillMaxWidth(),
             ) {
                 Column(
                     modifier = Modifier.padding(16.dp),
@@ -236,30 +229,42 @@ fun ReasoningPicker(
                 ) {
                     Text(stringResource(id = R.string.assistant_page_openai_reasoning_effort))
                     Text(
-                        text = stringResource(id = R.string.assistant_page_openai_reasoning_effort_desc),
+                        text = stringResource(id = R.string.assistant_page_openai_reasoning_effort_sent_desc),
                         style = MaterialTheme.typography.bodySmall,
                     )
-                    OutlinedTextField(
-                        value = openAIReasoningEffort,
-                        onValueChange = onUpdateOpenAIReasoningEffort,
-                        singleLine = true,
-                        modifier = Modifier.fillMaxWidth(),
-                        placeholder = {
-                            Text(stringResource(id = R.string.assistant_page_openai_reasoning_effort_hint))
-                        },
-                        supportingText = {
-                            Text(
-                                stringResource(
-                                    id = R.string.assistant_page_openai_reasoning_effort_effective,
-                                    effectiveChatCompletionsEffort,
-                                    effectiveResponsesEffort
-                                )
-                            )
-                        }
+                    OpenAIReasoningEffortRow(
+                        label = stringResource(R.string.assistant_page_openai_reasoning_effort_chat_completions),
+                        value = effectiveChatCompletionsEffort,
+                    )
+                    OpenAIReasoningEffortRow(
+                        label = stringResource(R.string.assistant_page_openai_reasoning_effort_responses),
+                        value = effectiveResponsesEffort,
                     )
                 }
             }
         }
+    }
+}
+
+@Composable
+private fun OpenAIReasoningEffortRow(
+    label: String,
+    value: String,
+) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text(
+            text = label,
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        Text(
+            text = value,
+            style = MaterialTheme.typography.titleSmall,
+        )
     }
 }
 
@@ -347,14 +352,9 @@ private fun ReasoningLevel.label(): String = when (this) {
 private fun ReasoningPickerPreview() {
     MaterialTheme {
         var level by remember { mutableStateOf(ReasoningLevel.AUTO) }
-        var openAIReasoningEffort by remember { mutableStateOf("") }
         ReasoningPicker(
             reasoningLevel = level,
             onUpdateReasoningLevel = { level = it },
-            openAIReasoningEffort = openAIReasoningEffort,
-            onUpdateOpenAIReasoningEffort = {
-                openAIReasoningEffort = it
-            },
         )
     }
 }

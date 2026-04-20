@@ -395,13 +395,6 @@ internal fun AssistantBasicContent(
                         onUpdate(assistant.copy(reasoningLevel = level))
                     },
                     openAIReasoningEffort = assistant.openAIReasoningEffort,
-                    onUpdateOpenAIReasoningEffort = { effort ->
-                        onUpdate(
-                            assistant.copy(
-                                openAIReasoningEffort = effort
-                            )
-                        )
-                    },
                 )
             }
         }

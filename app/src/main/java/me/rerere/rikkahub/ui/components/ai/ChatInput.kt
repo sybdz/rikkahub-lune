@@ -457,9 +457,6 @@ fun ChatInput(
                                         onUpdateAssistant(assistant.copy(reasoningLevel = it))
                                     },
                                     openAIReasoningEffort = assistant.openAIReasoningEffort,
-                                    onUpdateOpenAIReasoningEffort = {
-                                        onUpdateAssistant(assistant.copy(openAIReasoningEffort = it))
-                                    },
                                     onlyIcon = true,
                                 )
                             }
