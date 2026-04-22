@@ -7,6 +7,8 @@ import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.contentOrNull
+import kotlinx.serialization.json.jsonPrimitive
 import me.rerere.ai.core.MessageRole
 import me.rerere.ai.core.TokenUsage
 import me.rerere.ai.provider.Model
@@ -53,19 +55,23 @@ data class UIMessage(
                     }
 
                     is UIMessagePart.Image -> {
-                        val lastPart = acc.lastOrNull()
-                        if (lastPart is UIMessagePart.Image) {
-                            // Append to the last Image part (for streaming base64)
-                            acc.dropLast(1) + lastPart.copy(
-                                url = lastPart.url + deltaPart.url,
-                                metadata = deltaPart.metadata ?: lastPart.metadata
-                            )
+                        val normalizedImage = deltaPart.normalize()
+                        val responseItemId = normalizedImage.metadata.stringValue("response_item_id")
+
+                        if (responseItemId != null) {
+                            val existingIndex = acc.indexOfLast { part ->
+                                part is UIMessagePart.Image &&
+                                    part.metadata.stringValue("response_item_id") == responseItemId
+                            }
+                            if (existingIndex >= 0) {
+                                acc.toMutableList().apply {
+                                    set(existingIndex, normalizedImage)
+                                }.toList()
+                            } else {
+                                acc + normalizedImage
+                            }
                         } else {
-                            // Create new Image part
-                            acc + UIMessagePart.Image(
-                                url = "data:image/png;base64,${deltaPart.url}",
-                                metadata = deltaPart.metadata,
-                            )
+                            acc + normalizedImage
                         }
                     }
 
@@ -222,6 +228,16 @@ data class UIMessage(
         val match = LegacyUserShellCommandRegex.matchEntire(text) ?: return null
         return match.groupValues[1].removeSuffix("\n")
     }
+}
+
+private fun UIMessagePart.Image.normalize(): UIMessagePart.Image {
+    if (url.startsWith("data:")) return this
+    val mimeType = metadata.stringValue("mime_type") ?: "image/png"
+    return copy(url = "data:$mimeType;base64,$url")
+}
+
+private fun JsonObject?.stringValue(key: String): String? {
+    return this?.get(key)?.jsonPrimitive?.contentOrNull
 }
 
 /**

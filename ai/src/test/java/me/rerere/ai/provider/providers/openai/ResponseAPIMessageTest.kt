@@ -1,18 +1,24 @@
 package me.rerere.ai.provider.providers.openai
 
+import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.put
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
+import me.rerere.ai.core.InputSchema
 import me.rerere.ai.core.MessageRole
 import me.rerere.ai.core.ReasoningLevel
+import me.rerere.ai.core.Tool
+import me.rerere.ai.provider.BuiltInTools
 import me.rerere.ai.provider.Model
 import me.rerere.ai.provider.ModelAbility
 import me.rerere.ai.provider.ProviderSetting
 import me.rerere.ai.provider.TextGenerationParams
 import me.rerere.ai.ui.UIMessage
 import me.rerere.ai.ui.UIMessagePart
+import me.rerere.ai.util.json
 import okhttp3.OkHttpClient
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -444,6 +450,135 @@ class ResponseAPIMessageTest {
         )
 
         assertFalse(requestBody.containsKey("text"))
+    }
+
+    @Test
+    fun `response api should include function tools and built in tools together`() {
+        val requestBody = invokeBuildRequestBody(
+            providerSetting = ProviderSetting.OpenAI(
+                baseUrl = "https://api.openai.com/v1"
+            ),
+            params = TextGenerationParams(
+                model = Model(
+                    modelId = "gpt-5.4",
+                    displayName = "gpt-5.4",
+                    abilities = listOf(ModelAbility.TOOL),
+                    tools = setOf(BuiltInTools.Search, BuiltInTools.ImageGeneration)
+                ),
+                tools = listOf(
+                    Tool(
+                        name = "local_lookup",
+                        description = "Lookup local data",
+                        parameters = {
+                            InputSchema.Obj(
+                                properties = buildJsonObject {
+                                    put("query", buildJsonObject {
+                                        put("type", "string")
+                                    })
+                                },
+                                required = listOf("query")
+                            )
+                        }
+                    ) { emptyList() }
+                )
+            )
+        )
+
+        val tools = requestBody["tools"]?.jsonArray
+        assertEquals(3, tools?.size)
+        assertEquals("function", tools?.get(0)?.jsonObject?.get("type")?.jsonPrimitive?.content)
+        assertEquals("local_lookup", tools?.get(0)?.jsonObject?.get("name")?.jsonPrimitive?.content)
+        assertTrue(tools?.any { it.jsonObject["type"]?.jsonPrimitive?.content == "web_search" } == true)
+        assertTrue(tools?.any { it.jsonObject["type"]?.jsonPrimitive?.content == "image_generation" } == true)
+    }
+
+    @Test
+    fun `parseResponseOutput should convert image_generation_call to image part`() {
+        val result = api.parseResponseOutput(
+            buildJsonObject {
+                put("id", "resp_123")
+                put("model", "gpt-5.4")
+                put("output", json.parseToJsonElement(
+                    """
+                    [
+                      {
+                        "id": "ig_123",
+                        "type": "image_generation_call",
+                        "output_format": "png",
+                        "result": "abc123",
+                        "revised_prompt": "A red circle",
+                        "size": "1024x1024"
+                      },
+                      {
+                        "id": "msg_123",
+                        "type": "message",
+                        "content": [
+                          {
+                            "type": "output_text",
+                            "text": ""
+                          }
+                        ]
+                      }
+                    ]
+                    """.trimIndent()
+                ))
+            }
+        )
+
+        val message = result.choices.single().message
+        val image = message?.parts?.singleOrNull() as? UIMessagePart.Image
+        assertEquals("abc123", image?.url)
+        assertEquals("ig_123", image?.metadata?.get("response_item_id")?.jsonPrimitive?.content)
+        assertEquals("image/png", image?.metadata?.get("mime_type")?.jsonPrimitive?.content)
+        assertEquals("A red circle", image?.metadata?.get("revised_prompt")?.jsonPrimitive?.content)
+    }
+
+    @Test
+    fun `parseResponseDelta should convert output_item_done image_generation_call to image delta`() {
+        val result = api.parseResponseDelta(
+            json.parseToJsonElement(
+                """
+                {
+                  "type": "response.output_item.done",
+                  "output_index": 0,
+                  "item": {
+                    "id": "ig_123",
+                    "type": "image_generation_call",
+                    "output_format": "webp",
+                    "result": "xyz987",
+                    "revised_prompt": "A blue square",
+                    "size": "1024x1024"
+                  }
+                }
+                """.trimIndent()
+            ).jsonObject
+        )
+
+        val image = result?.choices?.single()?.delta?.parts?.singleOrNull() as? UIMessagePart.Image
+        assertEquals("xyz987", image?.url)
+        assertEquals("ig_123", image?.metadata?.get("response_item_id")?.jsonPrimitive?.content)
+        assertEquals("image/webp", image?.metadata?.get("mime_type")?.jsonPrimitive?.content)
+    }
+
+    @Test
+    fun `parseResponseDelta should convert partial image event to image delta`() {
+        val result = api.parseResponseDelta(
+            json.parseToJsonElement(
+                """
+                {
+                  "type": "response.image_generation_call.partial_image",
+                  "item_id": "ig_123",
+                  "output_index": 0,
+                  "partial_image_b64": "preview123"
+                }
+                """.trimIndent()
+            ).jsonObject
+        )
+
+        val image = result?.choices?.single()?.delta?.parts?.singleOrNull() as? UIMessagePart.Image
+        assertEquals("preview123", image?.url)
+        assertEquals("ig_123", image?.metadata?.get("response_item_id")?.jsonPrimitive?.content)
+        assertEquals("image/png", image?.metadata?.get("mime_type")?.jsonPrimitive?.content)
     }
 
     // ==================== Helper Functions ====================

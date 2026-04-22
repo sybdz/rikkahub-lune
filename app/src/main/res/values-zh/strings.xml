@@ -473,11 +473,13 @@
   <string name="setting_page_assistant">助手</string>
   <string name="setting_page_assistant_desc">设置个性化助手 (智能体)</string>
   <string name="setting_page_built_in_tools">内置工具</string>
-  <string name="setting_page_built_in_tools_desc">选择模型支持的内置工具, 这些工具直接由API内置，无需APP提供，当前这个功能仅支持Gemini官方API。</string>
+  <string name="setting_page_built_in_tools_desc">选择模型支持的内置工具，这些工具直接由 API 内置，无需 APP 提供。具体支持取决于提供商和模型，例如 Gemini 的搜索/URL 上下文，以及 OpenAI Responses 的搜索/图像生成。</string>
   <string name="setting_page_built_in_tools_search">搜索</string>
   <string name="setting_page_built_in_tools_search_desc">启用 Google 搜索集成</string>
   <string name="setting_page_built_in_tools_url_context">URL 上下文</string>
   <string name="setting_page_built_in_tools_url_context_desc">启用 URL 内容处理</string>
+  <string name="setting_page_built_in_tools_image_generation">图像生成</string>
+  <string name="setting_page_built_in_tools_image_generation_desc">为支持的 OpenAI Responses 模型启用内置图像生成工具</string>
   <string name="setting_page_chat_storage">聊天记录存储</string>
   <string name="setting_page_chat_storage_desc">%1$d 个文件，%2$.2f MB</string>
   <string name="setting_page_color_mode">颜色模式</string>

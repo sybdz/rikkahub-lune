@@ -510,6 +510,8 @@ class GoogleProvider(private val client: OkHttpClient, context: Context? = null)
                                     put("urlContext", buildJsonObject {})
                                 })
                             }
+
+                            BuiltInTools.ImageGeneration -> {}
                         }
                     }
                 })

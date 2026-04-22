@@ -50,7 +50,11 @@ sealed class BuiltInTools {
     @Serializable
     @SerialName("url_context")
     data object UrlContext : BuiltInTools()
-}
 
+    // https://platform.openai.com/docs/guides/tools-image-generation
+    @Serializable
+    @SerialName("image_generation")
+    data object ImageGeneration : BuiltInTools()
+}
 
 

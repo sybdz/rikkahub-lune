@@ -268,9 +268,8 @@ class ResponseAPI(
                 }
             }
 
-            // tools
-            if (params.model.abilities.contains(ModelAbility.TOOL) && params.tools.isNotEmpty()) {
-                putJsonArray("tools") {
+            val requestTools = buildList {
+                if (params.model.abilities.contains(ModelAbility.TOOL)) {
                     params.tools.forEach { tool ->
                         add(buildJsonObject {
                             put("type", "function")
@@ -285,20 +284,15 @@ class ResponseAPI(
                         })
                     }
                 }
+                params.model.tools.forEach { builtInTool ->
+                    buildBuiltInTool(builtInTool)?.let { add(it) }
+                }
             }
-            // built-in tools
-            if (params.model.tools.isNotEmpty()) {
-                putJsonArray("tools") {
-                    params.model.tools.forEach { builtInTool ->
-                        when (builtInTool) {
-                            BuiltInTools.Search -> {
-                                add(buildJsonObject {
-                                    put("type", "web_search")
-                                })
-                            }
 
-                            BuiltInTools.UrlContext -> {} // not supported
-                        }
+            if (requestTools.isNotEmpty()) {
+                putJsonArray("tools") {
+                    requestTools.forEach { tool ->
+                        add(tool)
                     }
                 }
             }
@@ -439,7 +433,7 @@ class ResponseAPI(
         })
     }
 
-    private fun parseResponseDelta(jsonObject: JsonObject): MessageChunk? {
+    internal fun parseResponseDelta(jsonObject: JsonObject): MessageChunk? {
         val chunkType = jsonObject["type"]?.jsonPrimitive?.content ?: error("chunk type not found")
 
         when (chunkType) {
@@ -546,34 +540,84 @@ class ResponseAPI(
                 val item = jsonObject["item"]?.jsonObject ?: error("chunk item not found")
                 val type = item["type"]?.jsonPrimitive?.content ?: error("chunk type not found")
                 val id = item["id"]?.jsonPrimitive?.content ?: error("chunk id not found")
-                if (type == "reasoning") {
-                    val encryptedContent = item["encrypted_content"]?.jsonPrimitive?.content
-                    // val summary = item["summary"]?.jsonArray ?: error("summary not found")
-                    return MessageChunk(
-                        id = id,
-                        model = "",
-                        choices = listOf(
-                            UIMessageChoice(
-                                index = 0,
-                                message = null,
-                                delta = UIMessage(
-                                    role = MessageRole.ASSISTANT,
-                                    parts = listOf(
-                                        UIMessagePart.Reasoning(
-                                            reasoning = "",
-                                            createdAt = Clock.System.now(),
-                                            finishedAt = null,
-                                            metadata = buildJsonObject {
-                                                put("encrypted_content", encryptedContent)
-                                            }
+                when (type) {
+                    "reasoning" -> {
+                        val encryptedContent = item["encrypted_content"]?.jsonPrimitive?.content
+                        return MessageChunk(
+                            id = id,
+                            model = "",
+                            choices = listOf(
+                                UIMessageChoice(
+                                    index = 0,
+                                    message = null,
+                                    delta = UIMessage(
+                                        role = MessageRole.ASSISTANT,
+                                        parts = listOf(
+                                            UIMessagePart.Reasoning(
+                                                reasoning = "",
+                                                createdAt = Clock.System.now(),
+                                                finishedAt = null,
+                                                metadata = buildJsonObject {
+                                                    put("encrypted_content", encryptedContent)
+                                                }
+                                            )
                                         )
-                                    )
-                                ),
-                                finishReason = null,
+                                    ),
+                                    finishReason = null,
+                                )
                             )
                         )
-                    )
+                    }
+
+                    "image_generation_call" -> {
+                        val imagePart = parseGeneratedImagePart(item) ?: return null
+                        return MessageChunk(
+                            id = id,
+                            model = "",
+                            choices = listOf(
+                                UIMessageChoice(
+                                    index = 0,
+                                    message = null,
+                                    delta = UIMessage(
+                                        role = MessageRole.ASSISTANT,
+                                        parts = listOf(imagePart)
+                                    ),
+                                    finishReason = null,
+                                )
+                            )
+                        )
+                    }
                 }
+            }
+
+            "response.image_generation_call.partial_image" -> {
+                val toolCallId =
+                    jsonObject["item_id"]?.jsonPrimitive?.content ?: error("item_id not found")
+                val partialImage =
+                    jsonObject["partial_image_b64"]?.jsonPrimitive?.content ?: error("partial_image_b64 not found")
+                return MessageChunk(
+                    id = toolCallId,
+                    model = "",
+                    choices = listOf(
+                        UIMessageChoice(
+                            index = 0,
+                            message = null,
+                            delta = UIMessage(
+                                role = MessageRole.ASSISTANT,
+                                parts = listOf(
+                                    UIMessagePart.Image(
+                                        url = partialImage,
+                                        metadata = buildImageMetadata(
+                                            responseItemId = toolCallId,
+                                            mimeType = "image/png",
+                                        )
+                                    )
+                                )
+                            ),
+                            finishReason = null,
+                        )
+                    ),
+                )
             }
 
             "response.function_call_arguments.done" -> {
@@ -618,7 +662,7 @@ class ResponseAPI(
         return null
     }
 
-    private fun parseResponseOutput(jsonObject: JsonObject): MessageChunk {
+    internal fun parseResponseOutput(jsonObject: JsonObject): MessageChunk {
         println(jsonObject)
         val outputs = jsonObject["output"]?.jsonArray ?: error("output not found")
         val parts = arrayListOf<UIMessagePart>()
@@ -661,6 +705,10 @@ class ResponseAPI(
                     )
                 }
 
+                "image_generation_call" -> {
+                    parseGeneratedImagePart(output)?.let { parts.add(it) }
+                }
+
                 "message" -> {
                     val content = output["content"]?.jsonArray ?: error("content not found")
                     content.map { it.jsonObject }.forEach { part ->
@@ -668,11 +716,13 @@ class ResponseAPI(
                         when (partType) {
                             "output_text" -> {
                                 val text = part["text"]?.jsonPrimitive?.content ?: error("text not found")
-                                parts.add(
-                                    UIMessagePart.Text(
-                                        text = text
+                                if (text.isNotEmpty()) {
+                                    parts.add(
+                                        UIMessagePart.Text(
+                                            text = text
+                                        )
                                     )
-                                )
+                                }
                             }
 
                             else -> error("unknown part type $partType")
@@ -709,6 +759,62 @@ class ResponseAPI(
             cachedTokens = jsonObject["input_tokens_details"]?.jsonObjectOrNull?.get("cached_tokens")?.jsonPrimitive?.intOrNull
                 ?: 0
         )
+    }
+}
+
+private fun buildBuiltInTool(tool: BuiltInTools): JsonObject? {
+    return when (tool) {
+        BuiltInTools.Search -> buildJsonObject {
+            put("type", "web_search")
+        }
+
+        BuiltInTools.ImageGeneration -> buildJsonObject {
+            put("type", "image_generation")
+        }
+
+        BuiltInTools.UrlContext -> null // not supported
+    }
+}
+
+private fun parseGeneratedImagePart(item: JsonObject): UIMessagePart.Image? {
+    val base64 = item["result"]?.jsonPrimitive?.contentOrNull ?: return null
+    val outputFormat = item["output_format"]?.jsonPrimitive?.contentOrNull
+    val mimeType = resolveResponseImageMimeType(outputFormat)
+    return UIMessagePart.Image(
+        url = base64,
+        metadata = buildImageMetadata(
+            responseItemId = item["id"]?.jsonPrimitive?.contentOrNull,
+            mimeType = mimeType,
+            revisedPrompt = item["revised_prompt"]?.jsonPrimitive?.contentOrNull,
+            outputFormat = outputFormat,
+            size = item["size"]?.jsonPrimitive?.contentOrNull,
+        )
+    )
+}
+
+private fun buildImageMetadata(
+    responseItemId: String? = null,
+    mimeType: String? = null,
+    revisedPrompt: String? = null,
+    outputFormat: String? = null,
+    size: String? = null,
+): JsonObject? {
+    return buildJsonObject {
+        responseItemId?.let { put("response_item_id", it) }
+        mimeType?.let { put("mime_type", it) }
+        revisedPrompt?.let { put("revised_prompt", it) }
+        outputFormat?.let { put("output_format", it) }
+        size?.let { put("size", it) }
+    }.takeIf { it.isNotEmpty() }
+}
+
+private fun resolveResponseImageMimeType(outputFormat: String?): String {
+    return when (outputFormat?.trim()?.lowercase()) {
+        null, "", "png" -> "image/png"
+        "jpg", "jpeg" -> "image/jpeg"
+        "webp" -> "image/webp"
+        "gif" -> "image/gif"
+        else -> "image/${outputFormat.trim().lowercase()}"
     }
 }
 

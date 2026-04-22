@@ -1,6 +1,9 @@
 package me.rerere.ai.ui
 
+import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.jsonPrimitive
+import kotlinx.serialization.json.put
 import me.rerere.ai.core.MessageRole
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -362,6 +365,126 @@ class MessageTest {
         )
 
         assertTrue(message.isValidToUpload())
+    }
+
+    @Test
+    fun `handleMessageChunk should keep generated images as separate parts`() {
+        val base = listOf(
+            UIMessage(role = MessageRole.ASSISTANT, parts = emptyList())
+        )
+
+        val first = MessageChunk(
+            id = "chunk-1",
+            model = "",
+            choices = listOf(
+                UIMessageChoice(
+                    index = 0,
+                    delta = UIMessage(
+                        role = MessageRole.ASSISTANT,
+                        parts = listOf(
+                            UIMessagePart.Image(
+                                url = "abc123",
+                                metadata = buildJsonObject {
+                                    put("mime_type", "image/png")
+                                }
+                            )
+                        )
+                    ),
+                    message = null,
+                    finishReason = null
+                )
+            )
+        )
+        val second = MessageChunk(
+            id = "chunk-2",
+            model = "",
+            choices = listOf(
+                UIMessageChoice(
+                    index = 0,
+                    delta = UIMessage(
+                        role = MessageRole.ASSISTANT,
+                        parts = listOf(
+                            UIMessagePart.Image(
+                                url = "def456",
+                                metadata = buildJsonObject {
+                                    put("mime_type", "image/webp")
+                                }
+                            )
+                        )
+                    ),
+                    message = null,
+                    finishReason = null
+                )
+            )
+        )
+
+        val result = base.handleMessageChunk(first).handleMessageChunk(second)
+
+        assertEquals(1, result.size)
+        assertEquals(2, result.single().parts.size)
+        assertEquals("data:image/png;base64,abc123", (result.single().parts[0] as UIMessagePart.Image).url)
+        assertEquals("data:image/webp;base64,def456", (result.single().parts[1] as UIMessagePart.Image).url)
+    }
+
+    @Test
+    fun `handleMessageChunk should replace generated image preview when response item id matches`() {
+        val base = listOf(
+            UIMessage(role = MessageRole.ASSISTANT, parts = emptyList())
+        )
+
+        val partial = MessageChunk(
+            id = "chunk-1",
+            model = "",
+            choices = listOf(
+                UIMessageChoice(
+                    index = 0,
+                    delta = UIMessage(
+                        role = MessageRole.ASSISTANT,
+                        parts = listOf(
+                            UIMessagePart.Image(
+                                url = "preview123",
+                                metadata = buildJsonObject {
+                                    put("response_item_id", "ig_123")
+                                    put("mime_type", "image/png")
+                                }
+                            )
+                        )
+                    ),
+                    message = null,
+                    finishReason = null
+                )
+            )
+        )
+        val completed = MessageChunk(
+            id = "chunk-2",
+            model = "",
+            choices = listOf(
+                UIMessageChoice(
+                    index = 0,
+                    delta = UIMessage(
+                        role = MessageRole.ASSISTANT,
+                        parts = listOf(
+                            UIMessagePart.Image(
+                                url = "final456",
+                                metadata = buildJsonObject {
+                                    put("response_item_id", "ig_123")
+                                    put("mime_type", "image/webp")
+                                }
+                            )
+                        )
+                    ),
+                    message = null,
+                    finishReason = null
+                )
+            )
+        )
+
+        val result = base.handleMessageChunk(partial).handleMessageChunk(completed)
+
+        assertEquals(1, result.single().parts.size)
+        val image = result.single().parts.single() as UIMessagePart.Image
+        assertEquals("data:image/webp;base64,final456", image.url)
+        assertEquals("ig_123", image.metadata?.get("response_item_id")?.jsonPrimitive?.content)
     }
 
     // ==================== migrateToolMessages Tests ====================
