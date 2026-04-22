@@ -457,6 +457,8 @@ fun ChatInput(
                                         onUpdateAssistant(assistant.copy(reasoningLevel = it))
                                     },
                                     openAIReasoningEffort = assistant.openAIReasoningEffort,
+                                    model = effectiveChatModel,
+                                    provider = effectiveChatModel.findProvider(settings.providers),
                                     onlyIcon = true,
                                 )
                             }

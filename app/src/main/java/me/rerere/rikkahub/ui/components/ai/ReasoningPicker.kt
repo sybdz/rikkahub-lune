@@ -5,12 +5,14 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Card
@@ -19,6 +21,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Slider
 import androidx.compose.material3.SliderDefaults
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
@@ -38,6 +41,8 @@ import androidx.compose.ui.unit.dp
 import me.rerere.ai.core.ReasoningLevel
 import me.rerere.ai.core.resolveOpenAIChatCompletionsReasoningEffort
 import me.rerere.ai.core.resolveOpenAIResponsesReasoningEffort
+import me.rerere.ai.provider.Model
+import me.rerere.ai.provider.ProviderSetting
 import me.rerere.hugeicons.HugeIcons
 import me.rerere.hugeicons.stroke.Idea
 import me.rerere.hugeicons.stroke.Idea01
@@ -46,10 +51,34 @@ import me.rerere.rikkahub.ui.components.ui.ToggleSurface
 import me.rerere.rikkahub.ui.components.ui.icons.ReasoningHigh
 import me.rerere.rikkahub.ui.components.ui.icons.ReasoningLow
 import me.rerere.rikkahub.ui.components.ui.icons.ReasoningMedium
+import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
 import kotlin.math.roundToInt
 
 private val levels = ReasoningLevel.entries
 private val levelCount = levels.size
+private val siliconflowThinkingModels = setOf(
+    "Pro/moonshotai/Kimi-K2.5",
+    "Pro/zai-org/GLM-5",
+    "Pro/zai-org/GLM-5.1",
+    "Pro/zai-org/GLM-4.7",
+    "deepseek-ai/DeepSeek-V3.2",
+    "Pro/deepseek-ai/DeepSeek-V3.2",
+    "Qwen/Qwen3.5-397B-A17B",
+    "Qwen/Qwen3.5-122B-A10B",
+    "Qwen/Qwen3.5-35B-A3B",
+    "Qwen/Qwen3.5-27B",
+    "Qwen/Qwen3.5-9B",
+    "Qwen/Qwen3.5-4B",
+    "zai-org/GLM-4.6",
+    "Qwen/Qwen3-8B",
+    "Qwen/Qwen3-14B",
+    "Qwen/Qwen3-32B",
+    "Qwen/Qwen3-30B-A3B",
+    "tencent/Hunyuan-A13B-Instruct",
+    "zai-org/GLM-4.5V",
+    "deepseek-ai/DeepSeek-V3.1-Terminus",
+    "Pro/deepseek-ai/DeepSeek-V3.1-Terminus",
+)
 
 @Composable
 fun ReasoningButton(
@@ -58,6 +87,8 @@ fun ReasoningButton(
     reasoningLevel: ReasoningLevel,
     onUpdateReasoningLevel: (ReasoningLevel) -> Unit,
     openAIReasoningEffort: String = "",
+    model: Model? = null,
+    provider: ProviderSetting? = null,
 ) {
     var showPicker by remember { mutableStateOf(false) }
 
@@ -65,6 +96,8 @@ fun ReasoningButton(
         ReasoningPicker(
             reasoningLevel = reasoningLevel,
             openAIReasoningEffort = openAIReasoningEffort,
+            model = model,
+            provider = provider,
             onDismissRequest = { showPicker = false },
             onUpdateReasoningLevel = onUpdateReasoningLevel,
         )
@@ -95,6 +128,8 @@ fun ReasoningButton(
 fun ReasoningPicker(
     reasoningLevel: ReasoningLevel,
     openAIReasoningEffort: String = "",
+    model: Model? = null,
+    provider: ProviderSetting? = null,
     onDismissRequest: () -> Unit = {},
     onUpdateReasoningLevel: (ReasoningLevel) -> Unit,
 ) {
@@ -108,6 +143,13 @@ fun ReasoningPicker(
         thinkingBudget = reasoningLevel.budgetTokens,
         overrideEffort = openAIReasoningEffort
     ) ?: notSent
+    val previews = buildReasoningParamPreviews(
+        reasoningLevel = reasoningLevel,
+        openAIChatEffort = effectiveChatCompletionsEffort,
+        openAIResponsesEffort = effectiveResponsesEffort,
+        provider = provider,
+        model = model,
+    )
     var sliderValue by remember { mutableFloatStateOf(currentIndex.toFloat()) }
 
     LaunchedEffect(currentIndex) {
@@ -224,22 +266,25 @@ fun ReasoningPicker(
                 modifier = Modifier.fillMaxWidth(),
             ) {
                 Column(
-                    modifier = Modifier.padding(16.dp),
-                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                    modifier = Modifier.padding(12.dp),
+                    verticalArrangement = Arrangement.spacedBy(10.dp),
                 ) {
-                    Text(stringResource(id = R.string.assistant_page_openai_reasoning_effort))
                     Text(
-                        text = stringResource(id = R.string.assistant_page_openai_reasoning_effort_sent_desc),
-                        style = MaterialTheme.typography.bodySmall,
+                        text = stringResource(R.string.assistant_page_reasoning_request_params),
+                        style = MaterialTheme.typography.titleSmall,
                     )
-                    OpenAIReasoningEffortRow(
-                        label = stringResource(R.string.assistant_page_openai_reasoning_effort_chat_completions),
-                        value = effectiveChatCompletionsEffort,
-                    )
-                    OpenAIReasoningEffortRow(
-                        label = stringResource(R.string.assistant_page_openai_reasoning_effort_responses),
-                        value = effectiveResponsesEffort,
-                    )
+                    FlowRow(
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp),
+                        maxItemsInEachRow = 2,
+                    ) {
+                        previews.forEach { preview ->
+                            ReasoningParamChip(
+                                label = preview.label,
+                                value = preview.value,
+                            )
+                        }
+                    }
                 }
             }
         }
@@ -247,25 +292,126 @@ fun ReasoningPicker(
 }
 
 @Composable
-private fun OpenAIReasoningEffortRow(
+private fun ReasoningParamChip(
     label: String,
     value: String,
 ) {
-    Row(
-        modifier = Modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.SpaceBetween,
-        verticalAlignment = Alignment.CenterVertically,
+    Surface(
+        color = MaterialTheme.colorScheme.surfaceContainerHighest,
+        shape = RoundedCornerShape(14.dp),
     ) {
-        Text(
-            text = label,
-            style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-        )
-        Text(
-            text = value,
-            style = MaterialTheme.typography.titleSmall,
-        )
+        Column(
+            modifier = Modifier
+                .widthIn(min = 118.dp, max = 196.dp)
+                .padding(horizontal = 8.dp, vertical = 6.dp),
+            verticalArrangement = Arrangement.spacedBy(2.dp),
+        ) {
+            Text(
+                text = label,
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            Text(
+                text = value,
+                style = MaterialTheme.typography.bodySmall,
+            )
+        }
     }
+}
+
+private data class ReasoningParamPreview(
+    val label: String,
+    val value: String,
+)
+
+private fun buildReasoningParamPreviews(
+    reasoningLevel: ReasoningLevel,
+    openAIChatEffort: String,
+    openAIResponsesEffort: String,
+    provider: ProviderSetting?,
+    model: Model?,
+): List<ReasoningParamPreview> = buildList {
+    currentCompatPreview(
+        reasoningLevel = reasoningLevel,
+        provider = provider,
+        model = model,
+    )?.let(::add)
+    add(ReasoningParamPreview("OpenAI Chat", "reasoning_effort=$openAIChatEffort"))
+    add(ReasoningParamPreview("Responses", "reasoning.effort=$openAIResponsesEffort"))
+    add(ReasoningParamPreview("Claude", reasoningLevel.toClaudePreview()))
+    add(ReasoningParamPreview("Gemini 3", reasoningLevel.toGemini3Preview()))
+    add(ReasoningParamPreview("Gemini 2.5 Pro", reasoningLevel.toGemini25ProPreview()))
+    add(ReasoningParamPreview("Gemini 2.5 Flash", reasoningLevel.toGemini25FlashPreview()))
+}
+
+private fun currentCompatPreview(
+    reasoningLevel: ReasoningLevel,
+    provider: ProviderSetting?,
+    model: Model?,
+): ReasoningParamPreview? {
+    val openAIProvider = provider as? ProviderSetting.OpenAI ?: return null
+    if (openAIProvider.useResponseApi) return null
+    val host = openAIProvider.baseUrl.toHttpUrlOrNull()?.host ?: return null
+    return when (host) {
+        "openrouter.ai" -> ReasoningParamPreview("Current · OpenRouter", reasoningLevel.toOpenRouterPreview())
+        "dashscope.aliyuncs.com" -> ReasoningParamPreview("Current · DashScope", reasoningLevel.toDashScopePreview())
+        "ark.cn-beijing.volces.com" -> ReasoningParamPreview("Current · Ark", reasoningLevel.toToggleThinkingPreview())
+        "chat.intern-ai.org.cn" -> ReasoningParamPreview("Current · InternLM", reasoningLevel.toInternLmPreview())
+        "api.siliconflow.cn" -> ReasoningParamPreview("Current · SiliconFlow", reasoningLevel.toSiliconFlowPreview(model))
+        "open.bigmodel.cn" -> ReasoningParamPreview("Current · GLM", reasoningLevel.toToggleThinkingPreview())
+        "api.moonshot.cn" -> ReasoningParamPreview("Current · Moonshot", reasoningLevel.toToggleThinkingPreview())
+        "api.mistral.ai" -> ReasoningParamPreview("Current · Mistral", "unsupported")
+        else -> null
+    }
+}
+
+private fun ReasoningLevel.toClaudePreview(): String = when (this) {
+    ReasoningLevel.OFF -> "thinking.type=disabled"
+    ReasoningLevel.AUTO -> "thinking.type=adaptive"
+    else -> "thinking.type=adaptive · effort=$effort"
+}
+
+private fun ReasoningLevel.toGemini3Preview(): String = when (this) {
+    ReasoningLevel.AUTO -> "default"
+    ReasoningLevel.OFF -> "thinkingLevel=minimal"
+    ReasoningLevel.LOW -> "thinkingLevel=low"
+    ReasoningLevel.MEDIUM -> "thinkingLevel=medium"
+    else -> "thinkingLevel=high"
+}
+
+private fun ReasoningLevel.toGemini25ProPreview(): String = when (this) {
+    ReasoningLevel.AUTO, ReasoningLevel.OFF -> "default"
+    else -> "thinkingBudget=$budgetTokens"
+}
+
+private fun ReasoningLevel.toGemini25FlashPreview(): String = when (this) {
+    ReasoningLevel.AUTO -> "default"
+    ReasoningLevel.OFF -> "thinkingBudget=0"
+    else -> "thinkingBudget=$budgetTokens"
+}
+
+private fun ReasoningLevel.toOpenRouterPreview(): String = when (this) {
+    ReasoningLevel.OFF -> "reasoning.effort=none"
+    ReasoningLevel.AUTO -> "reasoning.enabled=true"
+    else -> "reasoning.effort=$effort"
+}
+
+private fun ReasoningLevel.toDashScopePreview(): String = when (this) {
+    ReasoningLevel.AUTO -> "enable_thinking=true"
+    else -> "enable_thinking=$isEnabled · budget=$budgetTokens"
+}
+
+private fun ReasoningLevel.toToggleThinkingPreview(): String =
+    "thinking=${if (isEnabled) "enabled" else "disabled"}"
+
+private fun ReasoningLevel.toInternLmPreview(): String =
+    "thinking_mode=$isEnabled"
+
+private fun ReasoningLevel.toSiliconFlowPreview(model: Model?): String {
+    if (model != null && model.modelId !in siliconflowThinkingModels) {
+        return "enable_thinking=model-dependent"
+    }
+    return "enable_thinking=$isEnabled"
 }
 
 @Composable

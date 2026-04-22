@@ -395,6 +395,8 @@ internal fun AssistantBasicContent(
                         onUpdate(assistant.copy(reasoningLevel = level))
                     },
                     openAIReasoningEffort = assistant.openAIReasoningEffort,
+                    model = currentModel,
+                    provider = currentProvider,
                 )
             }
         }

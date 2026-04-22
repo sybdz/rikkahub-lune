@@ -136,6 +136,7 @@
   <string name="assistant_page_openai_reasoning_effort_sent_desc">Effective reasoning effort sent for each OpenAI API format.</string>
   <string name="assistant_page_openai_reasoning_effort_chat_completions">Chat Completions</string>
   <string name="assistant_page_openai_reasoning_effort_responses">Responses</string>
+  <string name="assistant_page_reasoning_request_params">Reasoning Request Params</string>
   <string name="assistant_page_openai_reasoning_effort_not_sent">not sent</string>
   <string name="assistant_schedule_add_task">Add Scheduled Task</string>
   <string name="assistant_schedule_summary_title">Scheduled Tasks</string>

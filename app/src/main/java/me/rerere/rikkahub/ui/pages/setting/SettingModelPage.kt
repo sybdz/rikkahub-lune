@@ -58,9 +58,11 @@ import me.rerere.rikkahub.data.ai.prompts.DEFAULT_OCR_PROMPT
 import me.rerere.rikkahub.data.ai.prompts.DEFAULT_SUGGESTION_PROMPT
 import me.rerere.rikkahub.data.ai.prompts.DEFAULT_TITLE_PROMPT
 import me.rerere.rikkahub.data.ai.prompts.DEFAULT_TRANSLATION_PROMPT
-import me.rerere.rikkahub.ui.components.ai.ReasoningButton
 import me.rerere.rikkahub.data.datastore.Settings
+import me.rerere.rikkahub.data.datastore.findModelById
+import me.rerere.rikkahub.data.datastore.findProvider
 import me.rerere.rikkahub.ui.components.ai.ModelSelector
+import me.rerere.rikkahub.ui.components.ai.ReasoningButton
 import me.rerere.rikkahub.ui.components.nav.BackButton
 import me.rerere.rikkahub.ui.components.ui.FormItem
 import me.rerere.rikkahub.ui.hooks.rememberDebouncedTextState
@@ -128,6 +130,8 @@ private fun DefaultTranslationModelSetting(
     vm: SettingVM
 ) {
     var showModal by remember { mutableStateOf(false) }
+    val currentModel = settings.providers.findModelById(settings.translateModeId)
+    val currentProvider = currentModel?.findProvider(settings.providers)
     ModelFeatureCard(
         title = {
             Text(
@@ -190,7 +194,9 @@ private fun DefaultTranslationModelSetting(
                         reasoningLevel = ReasoningLevel.fromBudgetTokens(settings.translateThinkingBudget),
                         onUpdateReasoningLevel = {
                             vm.updateSettings(settings.copy(translateThinkingBudget = it.budgetTokens))
-                        }
+                        },
+                        model = currentModel,
+                        provider = currentProvider,
                     )
                 }
 
