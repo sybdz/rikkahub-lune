@@ -1796,4 +1796,12 @@
   <string name="reasoning_xhigh">超高</string>
   <string name="reasoning_picker_title">調整模型思考深度</string>
   <string name="reasoning_picker_hint">並非所有模型都支援深度調整。請參閱模型與提供者文件。</string>
+  <string name="assistant_page_openai_reasoning_effort_sent_desc">針對每種 OpenAI API 格式所傳送的有效推理強度。</string>
+  <string name="assistant_page_openai_reasoning_effort_chat_completions">聊天補全</string>
+  <string name="assistant_page_openai_reasoning_effort_responses">回應</string>
+  <string name="assistant_page_reasoning_request_params">推理請求參數</string>
+  <string name="setting_page_built_in_tools_image_generation">圖片生成</string>
+  <string name="setting_page_built_in_tools_image_generation_desc">為支援的 OpenAI Responses 模型啟用內建影像生成工具</string>
+  <string name="setting_provider_page_use_service_account">使用 Service Account</string>
 </resources>
+

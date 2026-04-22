@@ -1850,4 +1850,12 @@ mDNSアドレス: .localホスト名を使用し、IPを知らなくても同じ
   <string name="reasoning_xhigh">XHigh</string>
   <string name="reasoning_picker_title">モデルの思考深度を調整</string>
   <string name="reasoning_picker_hint">すべてのモデルが深さ調整に対応しているわけではありません。モデルおよびプロバイダーのドキュメントを参照してください。</string>
+  <string name="assistant_page_openai_reasoning_effort_sent_desc">各OpenAI API形式に対して送信される有効な推論負荷。</string>
+  <string name="assistant_page_openai_reasoning_effort_chat_completions">Chat Completions</string>
+  <string name="assistant_page_openai_reasoning_effort_responses">応答</string>
+  <string name="assistant_page_reasoning_request_params">推論リクエストパラメータ</string>
+  <string name="setting_page_built_in_tools_image_generation">画像生成</string>
+  <string name="setting_page_built_in_tools_image_generation_desc">対応するOpenAI Responsesモデルで組み込みの画像生成ツールを有効にします</string>
+  <string name="setting_provider_page_use_service_account">サービス アカウントを使用</string>
 </resources>
+

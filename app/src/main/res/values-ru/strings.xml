@@ -1850,4 +1850,12 @@
   <string name="reasoning_xhigh">Очень высокий</string>
   <string name="reasoning_picker_title">Настроить глубину мышления модели</string>
   <string name="reasoning_picker_hint">Не все модели поддерживают настройку глубины. См. документацию модели и провайдера.</string>
+  <string name="assistant_page_openai_reasoning_effort_sent_desc">Эффективное значение reasoning effort, отправляемое для каждого формата OpenAI API.</string>
+  <string name="assistant_page_openai_reasoning_effort_chat_completions">Chat Completions</string>
+  <string name="assistant_page_openai_reasoning_effort_responses">Ответы</string>
+  <string name="assistant_page_reasoning_request_params">Параметры запроса на рассуждение</string>
+  <string name="setting_page_built_in_tools_image_generation">Генерация изображений</string>
+  <string name="setting_page_built_in_tools_image_generation_desc">Включить встроенный инструмент генерации изображений для поддерживаемых моделей OpenAI Responses</string>
+  <string name="setting_provider_page_use_service_account">Использовать Service Account</string>
 </resources>
+
