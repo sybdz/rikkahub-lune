@@ -5,14 +5,13 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Card
@@ -36,6 +35,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import me.rerere.ai.core.ReasoningLevel
@@ -273,16 +273,25 @@ fun ReasoningPicker(
                         text = stringResource(R.string.assistant_page_reasoning_request_params),
                         style = MaterialTheme.typography.titleSmall,
                     )
-                    FlowRow(
-                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    Column(
                         verticalArrangement = Arrangement.spacedBy(8.dp),
-                        maxItemsInEachRow = 2,
                     ) {
-                        previews.forEach { preview ->
-                            ReasoningParamChip(
-                                label = preview.label,
-                                value = preview.value,
-                            )
+                        previews.chunked(2).forEach { rowItems ->
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            ) {
+                                rowItems.forEach { preview ->
+                                    ReasoningParamChip(
+                                        label = preview.label,
+                                        value = preview.value,
+                                        modifier = Modifier.weight(1f),
+                                    )
+                                }
+                                if (rowItems.size == 1) {
+                                    Spacer(modifier = Modifier.weight(1f))
+                                }
+                            }
                         }
                     }
                 }
@@ -295,14 +304,15 @@ fun ReasoningPicker(
 private fun ReasoningParamChip(
     label: String,
     value: String,
+    modifier: Modifier = Modifier,
 ) {
     Surface(
+        modifier = modifier,
         color = MaterialTheme.colorScheme.surfaceContainerHighest,
         shape = RoundedCornerShape(14.dp),
     ) {
         Column(
             modifier = Modifier
-                .widthIn(min = 118.dp, max = 196.dp)
                 .padding(horizontal = 8.dp, vertical = 6.dp),
             verticalArrangement = Arrangement.spacedBy(2.dp),
         ) {
@@ -310,10 +320,14 @@ private fun ReasoningParamChip(
                 text = label,
                 style = MaterialTheme.typography.labelSmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
             )
             Text(
                 text = value,
                 style = MaterialTheme.typography.bodySmall,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
             )
         }
     }
