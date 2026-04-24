@@ -80,6 +80,22 @@ class MarkdownPreProcessTest {
     }
 
     @Test
+    fun extract_code_fence_content_handles_incomplete_fence() {
+        val markdown = """
+            ```kotlin
+            println("hi")
+        """.trimIndent()
+        val codeFence = findFirstCodeFence(parser.buildMarkdownTreeFromString(markdown))
+
+        val code = extractCodeFenceContent(codeFence, markdown)
+
+        assertEquals(
+            "println(\"hi\")",
+            code
+        )
+    }
+
+    @Test
     fun extract_code_fence_content_strips_list_container_indentation() {
         val markdown = """
             1. Example
