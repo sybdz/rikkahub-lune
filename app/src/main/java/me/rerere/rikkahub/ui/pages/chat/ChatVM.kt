@@ -10,13 +10,8 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import androidx.paging.PagingData
-import androidx.paging.cachedIn
-import androidx.paging.insertSeparators
-import androidx.paging.map
 import com.google.firebase.analytics.FirebaseAnalytics
 import kotlinx.coroutines.Job
-import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.SharingStarted
@@ -24,7 +19,6 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.flow.distinctUntilChanged
-import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
@@ -50,9 +44,6 @@ import me.rerere.rikkahub.ui.hooks.writeStringPreference
 import me.rerere.rikkahub.ui.hooks.ChatInputState
 import me.rerere.rikkahub.utils.UiState
 import me.rerere.rikkahub.utils.UpdateChecker
-import me.rerere.rikkahub.utils.toLocalString
-import java.time.LocalDate
-import java.time.ZoneId
 import java.util.Locale
 import kotlin.uuid.Uuid
 
@@ -129,72 +120,6 @@ class ChatVM(
     val enableWebSearch = settings.map {
         it.enableWebSearch
     }.stateIn(viewModelScope, SharingStarted.Eagerly, false)
-
-    // 聊天列表 (使用 Paging 分页加载)
-    val conversations: Flow<PagingData<ConversationListItem>> =
-        settings.map { it.assistantId }.distinctUntilChanged()
-            .flatMapLatest { assistantId ->
-                conversationRepo.getConversationsOfAssistantPaging(assistantId)
-            }
-            .map { pagingData ->
-                pagingData
-                    .map { ConversationListItem.Item(it) }
-                    .insertSeparators { before, after ->
-                        when {
-                            // 列表开头：检查第一项是否置顶
-                            before == null && after is ConversationListItem.Item -> {
-                                if (after.conversation.isPinned) {
-                                    ConversationListItem.PinnedHeader
-                                } else {
-                                    val afterDate = after.conversation.updateAt
-                                        .atZone(ZoneId.systemDefault())
-                                        .toLocalDate()
-                                    ConversationListItem.DateHeader(
-                                        date = afterDate,
-                                        label = getDateLabel(afterDate)
-                                    )
-                                }
-                            }
-
-                            // 中间项：检查置顶状态变化和日期变化
-                            before is ConversationListItem.Item && after is ConversationListItem.Item -> {
-                                // 从置顶切换到非置顶，显示日期头部
-                                if (before.conversation.isPinned && !after.conversation.isPinned) {
-                                    val afterDate = after.conversation.updateAt
-                                        .atZone(ZoneId.systemDefault())
-                                        .toLocalDate()
-                                    ConversationListItem.DateHeader(
-                                        date = afterDate,
-                                        label = getDateLabel(afterDate)
-                                    )
-                                }
-                                // 对于非置顶项，检查日期变化
-                                else if (!after.conversation.isPinned) {
-                                    val beforeDate = before.conversation.updateAt
-                                        .atZone(ZoneId.systemDefault())
-                                        .toLocalDate()
-                                    val afterDate = after.conversation.updateAt
-                                        .atZone(ZoneId.systemDefault())
-                                        .toLocalDate()
-
-                                    if (beforeDate != afterDate) {
-                                        ConversationListItem.DateHeader(
-                                            date = afterDate,
-                                            label = getDateLabel(afterDate)
-                                        )
-                                    } else {
-                                        null
-                                    }
-                                } else {
-                                    null
-                                }
-                            }
-
-                            else -> null
-                        }
-                    }
-            }
-            .cachedIn(viewModelScope)
 
     // 当前模型
     val currentChatModel = settings.map { settings ->
@@ -491,14 +416,4 @@ class ChatVM(
         }
     }
 
-    private fun getDateLabel(date: LocalDate): String {
-        val today = LocalDate.now()
-        val yesterday = today.minusDays(1)
-
-        return when (date) {
-            today -> context.getString(R.string.chat_page_today)
-            yesterday -> context.getString(R.string.chat_page_yesterday)
-            else -> date.toLocalString(date.year != today.year)
-        }
-    }
 }

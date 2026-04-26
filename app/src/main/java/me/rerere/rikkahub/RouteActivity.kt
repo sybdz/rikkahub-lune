@@ -1,5 +1,6 @@
 package me.rerere.rikkahub
 
+import android.annotation.SuppressLint
 import android.content.Intent
 import android.os.Build
 import android.os.Bundle
@@ -49,6 +50,7 @@ import coil3.ImageLoader
 import coil3.compose.setSingletonImageLoaderFactory
 import coil3.gif.AnimatedImageDecoder
 import coil3.gif.GifDecoder
+import coil3.network.cachecontrol.CacheControlCacheStrategy
 import coil3.network.okhttp.OkHttpNetworkFetcherFactory
 import coil3.request.crossfade
 import coil3.svg.SvgDecoder
@@ -173,14 +175,17 @@ class RouteActivity : ComponentActivity() {
 
     internal val volumeKeyListeners = mutableListOf<(isVolumeUp: Boolean) -> Boolean>()
 
-    override fun onKeyDown(keyCode: Int, event: KeyEvent): Boolean {
-        val isVolumeUp = when (keyCode) {
-            KeyEvent.KEYCODE_VOLUME_UP -> true
-            KeyEvent.KEYCODE_VOLUME_DOWN -> false
-            else -> return super.onKeyDown(keyCode, event)
+    @SuppressLint("RestrictedApi")
+    override fun dispatchKeyEvent(event: KeyEvent): Boolean {
+        if (event.action == KeyEvent.ACTION_DOWN) {
+            val isVolumeUp = when (event.keyCode) {
+                KeyEvent.KEYCODE_VOLUME_UP -> true
+                KeyEvent.KEYCODE_VOLUME_DOWN -> false
+                else -> return super.dispatchKeyEvent(event)
+            }
+            if (volumeKeyListeners.lastOrNull()?.invoke(isVolumeUp) == true) return true
         }
-        if (volumeKeyListeners.lastOrNull()?.invoke(isVolumeUp) == true) return true
-        return super.onKeyDown(keyCode, event)
+        return super.dispatchKeyEvent(event)
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -198,7 +203,12 @@ class RouteActivity : ComponentActivity() {
                     ImageLoader.Builder(context)
                         .crossfade(true)
                         .components {
-                            add(OkHttpNetworkFetcherFactory(callFactory = { okHttpClient }))
+                            add(
+                                OkHttpNetworkFetcherFactory(
+                                    callFactory = { okHttpClient },
+                                    cacheStrategy = { CacheControlCacheStrategy() },
+                                )
+                            )
                             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
                                 add(AnimatedImageDecoder.Factory())
                             } else {
