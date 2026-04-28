@@ -406,6 +406,7 @@ fun MarkdownBlock(
                         headerLevelOffset = headerLevelOffset,
                         onClickCitation = onClickCitation,
                         messageDepthFromEnd = messageDepthFromEnd,
+                        animateContent = animateContent,
                     )
                 }
             }
@@ -501,6 +502,7 @@ private fun MarkdownNode(
     onClickCitation: (String) -> Unit = {},
     listLevel: Int = 0,
     messageDepthFromEnd: Int? = null,
+    animateContent: Boolean = true,
 ) {
     when (node.type) {
         // 文件根节点
@@ -513,6 +515,7 @@ private fun MarkdownNode(
                     headerLevelOffset = headerLevelOffset,
                     onClickCitation = onClickCitation,
                     messageDepthFromEnd = messageDepthFromEnd,
+                    animateContent = animateContent,
                 )
             }
         }
@@ -526,6 +529,7 @@ private fun MarkdownNode(
                 headerLevelOffset = headerLevelOffset,
                 onClickCitation = onClickCitation,
                 messageDepthFromEnd = messageDepthFromEnd,
+                animateContent = animateContent,
             )
         }
 
@@ -554,6 +558,7 @@ private fun MarkdownNode(
                                 modifier = modifier.padding(vertical = headingPadding),
                                 trim = true,
                                 messageDepthFromEnd = messageDepthFromEnd,
+                                animateContent = animateContent,
                             )
                         }
                     }
@@ -571,6 +576,7 @@ private fun MarkdownNode(
                 onClickCitation = onClickCitation,
                 level = listLevel,
                 messageDepthFromEnd = messageDepthFromEnd,
+                animateContent = animateContent,
             )
         }
 
@@ -583,6 +589,7 @@ private fun MarkdownNode(
                 onClickCitation = onClickCitation,
                 level = listLevel,
                 messageDepthFromEnd = messageDepthFromEnd,
+                animateContent = animateContent,
             )
         }
 
@@ -635,6 +642,7 @@ private fun MarkdownNode(
                             headerLevelOffset = headerLevelOffset,
                             onClickCitation = onClickCitation,
                             messageDepthFromEnd = messageDepthFromEnd,
+                            animateContent = animateContent,
                         )
                     }
                 }
@@ -670,6 +678,7 @@ private fun MarkdownNode(
                         headerLevelOffset = headerLevelOffset,
                         onClickCitation = onClickCitation,
                         messageDepthFromEnd = messageDepthFromEnd,
+                        animateContent = animateContent,
                     )
                 }
             }
@@ -685,6 +694,7 @@ private fun MarkdownNode(
                         headerLevelOffset = headerLevelOffset,
                         onClickCitation = onClickCitation,
                         messageDepthFromEnd = messageDepthFromEnd,
+                        animateContent = animateContent,
                     )
                 }
             }
@@ -800,14 +810,15 @@ private fun MarkdownNode(
             val hasEnd = node.findChildOfTypeRecursive(MarkdownTokenTypes.CODE_FENCE_END) != null
             val displaySetting = LocalSettings.current.displaySetting
             val shouldRenderCodeBlock = displaySetting.shouldRenderCodeBlock(messageDepthFromEnd)
+            val allowRichCodeBlockRender = animateContent && shouldRenderCodeBlock
             val renderTarget = remember(
                 language,
                 code,
                 hasEnd,
-                shouldRenderCodeBlock,
+                allowRichCodeBlockRender,
                 displaySetting.enableCodeBlockRichRender,
             ) {
-                if (hasEnd && shouldRenderCodeBlock && displaySetting.enableCodeBlockRichRender) {
+                if (hasEnd && allowRichCodeBlockRender && displaySetting.enableCodeBlockRichRender) {
                     CodeBlockRenderResolver.resolve(language = language, code = code)
                 } else {
                     null
@@ -843,7 +854,8 @@ private fun MarkdownNode(
                         .padding(bottom = 4.dp)
                         .fillMaxWidth(),
                     completeCodeBlock = hasEnd,
-                    renderMermaidRichly = shouldRenderCodeBlock,
+                    renderMermaidRichly = allowRichCodeBlockRender,
+                    animateContent = animateContent,
                 )
             }
         }
@@ -874,6 +886,7 @@ private fun MarkdownNode(
                     headerLevelOffset = headerLevelOffset,
                     onClickCitation = onClickCitation,
                     messageDepthFromEnd = messageDepthFromEnd,
+                    animateContent = animateContent,
                 )
             }
         }
@@ -889,6 +902,7 @@ private fun UnorderedListNode(
     onClickCitation: (String) -> Unit = {},
     level: Int = 0,
     messageDepthFromEnd: Int? = null,
+    animateContent: Boolean = true,
 ) {
     val bulletStyle = when (level % 3) {
         0 -> "• "
@@ -909,6 +923,7 @@ private fun UnorderedListNode(
                     onClickCitation = onClickCitation,
                     level = level,
                     messageDepthFromEnd = messageDepthFromEnd,
+                    animateContent = animateContent,
                 )
             }
         }
@@ -924,6 +939,7 @@ private fun OrderedListNode(
     onClickCitation: (String) -> Unit = {},
     level: Int = 0,
     messageDepthFromEnd: Int? = null,
+    animateContent: Boolean = true,
 ) {
     Column(modifier.padding(start = (level * 8).dp)) {
         var index = 1
@@ -939,6 +955,7 @@ private fun OrderedListNode(
                     onClickCitation = onClickCitation,
                     level = level,
                     messageDepthFromEnd = messageDepthFromEnd,
+                    animateContent = animateContent,
                 )
                 index++
             }
@@ -955,6 +972,7 @@ private fun ListItemNode(
     onClickCitation: (String) -> Unit = {},
     level: Int,
     messageDepthFromEnd: Int? = null,
+    animateContent: Boolean = true,
 ) {
     Column {
         // 分离列表项的直接内容和嵌套列表
@@ -979,6 +997,7 @@ private fun ListItemNode(
                             onClickCitation = onClickCitation,
                             listLevel = level,
                             messageDepthFromEnd = messageDepthFromEnd,
+                            animateContent = animateContent,
                         )
                     }
                 }
@@ -993,6 +1012,7 @@ private fun ListItemNode(
                 onClickCitation = onClickCitation,
                 listLevel = level + 1,
                 messageDepthFromEnd = messageDepthFromEnd,
+                animateContent = animateContent,
             )
         }
     }
@@ -1025,6 +1045,7 @@ private fun Paragraph(
     onClickCitation: (String) -> Unit = {},
     modifier: Modifier,
     messageDepthFromEnd: Int? = null,
+    animateContent: Boolean = true,
 ) {
     // dumpAst(node, content)
     if (node.findChildOfTypeRecursive(MarkdownElementTypes.IMAGE, GFMElementTypes.BLOCK_MATH) != null) {
@@ -1036,6 +1057,7 @@ private fun Paragraph(
                     headerLevelOffset = headerLevelOffset,
                     onClickCitation = onClickCitation,
                     messageDepthFromEnd = messageDepthFromEnd,
+                    animateContent = animateContent,
                 )
             }
         }

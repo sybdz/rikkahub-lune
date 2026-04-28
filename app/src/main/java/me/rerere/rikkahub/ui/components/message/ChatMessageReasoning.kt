@@ -46,6 +46,7 @@ import me.rerere.rikkahub.data.model.Assistant
 import me.rerere.rikkahub.data.model.AssistantAffectScope
 import me.rerere.rikkahub.data.model.AssistantRegexApplyPhase
 import me.rerere.rikkahub.data.model.AssistantRegexPlacement
+import me.rerere.rikkahub.data.model.hasApplicableRegexes
 import me.rerere.rikkahub.data.model.replaceRegexes
 import me.rerere.rikkahub.ui.components.richtext.MarkdownBlock
 import me.rerere.rikkahub.ui.components.ui.ChainOfThoughtScope
@@ -166,20 +167,48 @@ private fun ReasoningContent(
                 }
             }
     ) {
-        val content = reasoning.reasoning.replaceRegexes(
-            assistant = assistant,
-            settings = LocalSettings.current,
-            scope = AssistantAffectScope.ASSISTANT,
-            phase = AssistantRegexApplyPhase.VISUAL_ONLY,
-            messageDepthFromEnd = messageDepthFromEnd,
-            placement = AssistantRegexPlacement.REASONING,
-        )
+        val settings = LocalSettings.current
+        val shouldApplyVisualRegexes = remember(
+            loading,
+            assistant,
+            settings,
+            messageDepthFromEnd,
+        ) {
+            !loading && settings.hasApplicableRegexes(
+                assistant = assistant,
+                scope = AssistantAffectScope.ASSISTANT,
+                phase = AssistantRegexApplyPhase.VISUAL_ONLY,
+                messageDepthFromEnd = messageDepthFromEnd,
+                placement = AssistantRegexPlacement.REASONING,
+            )
+        }
+        val content = remember(
+            reasoning.reasoning,
+            shouldApplyVisualRegexes,
+            assistant,
+            settings,
+            messageDepthFromEnd,
+        ) {
+            if (shouldApplyVisualRegexes) {
+                reasoning.reasoning.replaceRegexes(
+                    assistant = assistant,
+                    settings = settings,
+                    scope = AssistantAffectScope.ASSISTANT,
+                    phase = AssistantRegexApplyPhase.VISUAL_ONLY,
+                    messageDepthFromEnd = messageDepthFromEnd,
+                    placement = AssistantRegexPlacement.REASONING,
+                )
+            } else {
+                reasoning.reasoning
+            }
+        }
         val block: @Composable () -> Unit = {
             MarkdownBlock(
                 content = content,
                 style = MaterialTheme.typography.bodySmall,
                 modifier = Modifier.fillMaxSize(),
                 messageDepthFromEnd = messageDepthFromEnd,
+                animateContent = !loading,
             )
         }
         if (loading) {

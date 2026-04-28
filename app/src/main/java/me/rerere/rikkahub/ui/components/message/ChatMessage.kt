@@ -84,8 +84,8 @@ import me.rerere.rikkahub.data.model.AssistantRegexPlacement
 import me.rerere.rikkahub.data.model.MessageNode
 import me.rerere.rikkahub.data.model.effectiveUserAvatar
 import me.rerere.rikkahub.data.model.effectiveUserName
+import me.rerere.rikkahub.data.model.hasApplicableRegexes
 import me.rerere.rikkahub.data.model.replaceRegexes
-import me.rerere.rikkahub.data.model.runtimeRegexes
 import me.rerere.rikkahub.data.model.selectedUserPersonaProfile
 import me.rerere.rikkahub.ui.components.richtext.HighlightCodeBlock
 import me.rerere.rikkahub.ui.components.richtext.MarkdownBlock
@@ -118,6 +118,7 @@ private fun SelectableMarkdownBlock(
     content: String,
     modifier: Modifier = Modifier,
     messageDepthFromEnd: Int? = null,
+    animateContent: Boolean = true,
     onClickCitation: (String) -> Unit = {},
 ) {
     SelectionContainer {
@@ -125,9 +126,41 @@ private fun SelectableMarkdownBlock(
             content = content,
             modifier = modifier,
             messageDepthFromEnd = messageDepthFromEnd,
+            animateContent = animateContent,
             onClickCitation = onClickCitation,
         )
     }
+}
+
+private fun String.applyVisualRegexesIfNeeded(
+    assistant: Assistant?,
+    settings: Settings,
+    scope: AssistantAffectScope,
+    messageDepthFromEnd: Int?,
+    placement: Int,
+    deferWhileStreaming: Boolean,
+): String {
+    if (deferWhileStreaming) return this
+    if (
+        !settings.hasApplicableRegexes(
+            assistant = assistant,
+            scope = scope,
+            phase = AssistantRegexApplyPhase.VISUAL_ONLY,
+            messageDepthFromEnd = messageDepthFromEnd,
+            placement = placement,
+        )
+    ) {
+        return this
+    }
+
+    return replaceRegexes(
+        assistant = assistant,
+        settings = settings,
+        scope = scope,
+        phase = AssistantRegexApplyPhase.VISUAL_ONLY,
+        messageDepthFromEnd = messageDepthFromEnd,
+        placement = placement,
+    )
 }
 
 @Composable
@@ -389,7 +422,6 @@ private fun MessagePartsBlock(
     // 消息输出HapticFeedback
     val hapticFeedback = LocalHapticFeedback.current
     val settings = LocalSettings.current
-    val runtimeRegexes = remember(settings) { settings.runtimeRegexes() }
     val regexRenderCacheKey = userRegexRenderCacheKey(settings)
     val handleClickCitation: (String) -> Unit = remember {
         handler@{ citationId ->
@@ -478,17 +510,18 @@ private fun MessagePartsBlock(
                                 val renderedText = remember(
                                     part.text,
                                     assistant,
-                                    runtimeRegexes,
+                                    settings,
+                                    loading,
                                     messageDepthFromEnd,
                                     regexRenderCacheKey,
                                 ) {
-                                    part.text.replaceRegexes(
+                                    part.text.applyVisualRegexesIfNeeded(
                                         assistant = assistant,
                                         settings = settings,
                                         scope = AssistantAffectScope.USER,
-                                        phase = AssistantRegexApplyPhase.VISUAL_ONLY,
                                         messageDepthFromEnd = messageDepthFromEnd,
                                         placement = AssistantRegexPlacement.USER_INPUT,
+                                        deferWhileStreaming = loading,
                                     )
                                 }
                                 Surface(
@@ -504,6 +537,7 @@ private fun MessagePartsBlock(
                                         SelectableMarkdownBlock(
                                             content = renderedText,
                                             messageDepthFromEnd = messageDepthFromEnd,
+                                            animateContent = !loading,
                                             onClickCitation = handleClickCitation
                                         )
                                     }
@@ -513,17 +547,18 @@ private fun MessagePartsBlock(
                             val renderedText = remember(
                                 part.text,
                                 assistant,
-                                runtimeRegexes,
+                                settings,
+                                loading,
                                 messageDepthFromEnd,
                                 regexRenderCacheKey,
                             ) {
-                                part.text.replaceRegexes(
+                                part.text.applyVisualRegexesIfNeeded(
                                     assistant = assistant,
                                     settings = settings,
                                     scope = AssistantAffectScope.ASSISTANT,
-                                    phase = AssistantRegexApplyPhase.VISUAL_ONLY,
                                     messageDepthFromEnd = messageDepthFromEnd,
                                     placement = AssistantRegexPlacement.AI_OUTPUT,
+                                    deferWhileStreaming = loading,
                                 )
                             }
                             if (settings.displaySetting.showAssistantBubble) {
@@ -539,6 +574,7 @@ private fun MessagePartsBlock(
                                         SelectableMarkdownBlock(
                                             content = renderedText,
                                             messageDepthFromEnd = messageDepthFromEnd,
+                                            animateContent = !loading,
                                             onClickCitation = handleClickCitation,
                                         )
                                     }
@@ -547,6 +583,7 @@ private fun MessagePartsBlock(
                                 SelectableMarkdownBlock(
                                     content = renderedText,
                                     messageDepthFromEnd = messageDepthFromEnd,
+                                    animateContent = !loading,
                                     onClickCitation = handleClickCitation,
                                     modifier = Modifier
                                 )

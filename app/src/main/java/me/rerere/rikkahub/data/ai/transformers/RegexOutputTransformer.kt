@@ -16,13 +16,11 @@ object RegexOutputTransformer : OutputMessageTransformer, KoinComponent {
         ctx: TransformerContext,
         messages: List<UIMessage>,
     ): List<UIMessage> {
+        // Visual-only regexes are applied by the chat renderer after streaming finishes.
         return applyAssistantOutputRegexes(
             ctx = ctx,
             messages = messages,
-            phases = listOf(
-                AssistantRegexApplyPhase.ACTUAL_MESSAGE,
-                AssistantRegexApplyPhase.VISUAL_ONLY,
-            ),
+            phases = listOf(AssistantRegexApplyPhase.ACTUAL_MESSAGE),
         )
     }
 

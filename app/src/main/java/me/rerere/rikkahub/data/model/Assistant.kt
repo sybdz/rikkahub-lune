@@ -9,11 +9,19 @@ import me.rerere.ai.ui.UIMessage
 import me.rerere.ai.core.ReasoningLevel
 import me.rerere.rikkahub.data.ai.tools.LocalToolOption
 import me.rerere.rikkahub.data.datastore.Settings
+import java.util.concurrent.ConcurrentHashMap
 import kotlin.random.Random
 import kotlin.uuid.Uuid
 
 private val DEFAULT_SCHEDULED_TASK_ASSISTANT_ID = Uuid.parse("0950e2dc-9bd5-4801-afa3-aa887aa36b4e")
 const val ASSISTANT_TOOL_CALL_KEEP_ROUNDS_SLIDER_MAX = 32
+private const val COMPILED_ASSISTANT_REGEX_CACHE_LIMIT = 256
+private val compiledAssistantRegexCache = ConcurrentHashMap<AssistantRegexCacheKey, Regex>()
+
+private data class AssistantRegexCacheKey(
+    val pattern: String,
+    val options: Set<RegexOption>,
+)
 
 @Serializable
 data class Assistant(
@@ -262,67 +270,59 @@ fun String.replaceRegexes(
     isEdit: Boolean = false,
     characterOverride: String? = null,
 ): String {
-    val effectiveRegexes = settings?.effectiveRegexes(assistant)
-        ?: assistant
-            ?.takeIf { it.regexEnabled }
-            ?.regexes
-            .orEmpty()
-    if (effectiveRegexes.isEmpty()) return this
-    return effectiveRegexes.fold(this) { acc, regex ->
-        if (
-            regex.enabled &&
-            regex.matchesPlacement(
-                scope = scope,
-                phase = phase,
-                placement = placement,
-                isEdit = isEdit,
-            ) &&
-            regex.matchesDepth(messageDepthFromEnd)
-        ) {
-            try {
-                val patternSpec = regex.resolveFindRegexPattern(
-                    assistant = assistant,
-                    settings = settings,
-                    characterOverride = characterOverride,
-                ) ?: return@fold acc
-                val compiledRegex = Regex(patternSpec.pattern, patternSpec.options)
-                val result = if (regex.requiresCustomReplacement()) {
-                    if (patternSpec.replaceAll) {
-                        compiledRegex.replace(acc) { matchResult ->
-                            regex.buildReplacement(
-                                matchResult = matchResult,
-                                assistant = assistant,
-                                settings = settings,
-                                characterOverride = characterOverride,
-                            )
-                        }
-                    } else {
-                        compiledRegex.replaceFirst(acc) { matchResult ->
-                            regex.buildReplacement(
-                                matchResult = matchResult,
-                                assistant = assistant,
-                                settings = settings,
-                                characterOverride = characterOverride,
-                            )
-                        }
+    val applicableRegexes = applicableRegexes(
+        assistant = assistant,
+        settings = settings,
+        scope = scope,
+        phase = phase,
+        messageDepthFromEnd = messageDepthFromEnd,
+        placement = placement,
+        isEdit = isEdit,
+    )
+    if (applicableRegexes.isEmpty()) return this
+
+    return applicableRegexes.fold(this) { acc, regex ->
+        try {
+            val patternSpec = regex.resolveFindRegexPattern(
+                assistant = assistant,
+                settings = settings,
+                characterOverride = characterOverride,
+            ) ?: return@fold acc
+            val compiledRegex = patternSpec.cachedRegex()
+            val result = if (regex.requiresCustomReplacement()) {
+                if (patternSpec.replaceAll) {
+                    compiledRegex.replace(acc) { matchResult ->
+                        regex.buildReplacement(
+                            matchResult = matchResult,
+                            assistant = assistant,
+                            settings = settings,
+                            characterOverride = characterOverride,
+                        )
                     }
                 } else {
-                    if (patternSpec.replaceAll) {
-                        acc.replace(
-                            regex = compiledRegex,
-                            replacement = regex.replaceString,
+                    compiledRegex.replaceFirst(acc) { matchResult ->
+                        regex.buildReplacement(
+                            matchResult = matchResult,
+                            assistant = assistant,
+                            settings = settings,
+                            characterOverride = characterOverride,
                         )
-                    } else {
-                        compiledRegex.replaceFirst(acc, regex.replaceString)
                     }
                 }
-                result
-            } catch (e: Exception) {
-                e.printStackTrace()
-                // 如果正则表达式格式错误，返回原字符串
-                acc
+            } else {
+                if (patternSpec.replaceAll) {
+                    acc.replace(
+                        regex = compiledRegex,
+                        replacement = regex.replaceString,
+                    )
+                } else {
+                    compiledRegex.replaceFirst(acc, regex.replaceString)
+                }
             }
-        } else {
+            result
+        } catch (e: Exception) {
+            e.printStackTrace()
+            // 如果正则表达式格式错误，返回原字符串
             acc
         }
     }
@@ -340,6 +340,63 @@ fun Settings.effectiveRegexes(assistant: Assistant?): List<AssistantRegex> {
         .asReversed()
         .distinctBy { it.dedupKey() }
         .asReversed()
+}
+
+fun Settings.hasApplicableRegexes(
+    assistant: Assistant?,
+    scope: AssistantAffectScope,
+    phase: AssistantRegexApplyPhase,
+    messageDepthFromEnd: Int? = null,
+    placement: Int? = null,
+    isEdit: Boolean = false,
+): Boolean {
+    return applicableRegexes(
+        assistant = assistant,
+        settings = this,
+        scope = scope,
+        phase = phase,
+        messageDepthFromEnd = messageDepthFromEnd,
+        placement = placement,
+        isEdit = isEdit,
+    ).isNotEmpty()
+}
+
+private fun applicableRegexes(
+    assistant: Assistant?,
+    settings: Settings?,
+    scope: AssistantAffectScope,
+    phase: AssistantRegexApplyPhase,
+    messageDepthFromEnd: Int?,
+    placement: Int?,
+    isEdit: Boolean,
+): List<AssistantRegex> {
+    val effectiveRegexes = settings?.effectiveRegexes(assistant)
+        ?: assistant
+            ?.takeIf { it.regexEnabled }
+            ?.regexes
+            .orEmpty()
+    if (effectiveRegexes.isEmpty()) return emptyList()
+
+    return effectiveRegexes.filter { regex ->
+        regex.enabled &&
+            regex.matchesPlacement(
+                scope = scope,
+                phase = phase,
+                placement = placement,
+                isEdit = isEdit,
+            ) &&
+            regex.matchesDepth(messageDepthFromEnd)
+    }
+}
+
+private fun AssistantRegexPatternSpec.cachedRegex(): Regex {
+    val key = AssistantRegexCacheKey(pattern = pattern, options = options)
+    return compiledAssistantRegexCache.getOrPut(key) {
+        if (compiledAssistantRegexCache.size >= COMPILED_ASSISTANT_REGEX_CACHE_LIMIT) {
+            compiledAssistantRegexCache.clear()
+        }
+        Regex(pattern, options)
+    }
 }
 
 private fun AssistantRegex.matchesPlacement(

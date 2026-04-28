@@ -105,6 +105,7 @@ fun HighlightCodeBlock(
     completeCodeBlock: Boolean = true,
     style: TextStyle? = null,
     renderMermaidRichly: Boolean = true,
+    animateContent: Boolean = true,
 ) {
     val darkMode = LocalDarkMode.current
     val colorPalette = if (darkMode) AtomOneDarkPalette else AtomOneLightPalette
@@ -210,6 +211,7 @@ fun HighlightCodeBlock(
                                 autoWrap = autoWrap,
                                 showLineNumbers = showLineNumbers,
                                 scrollState = scrollState,
+                                animateContent = animateContent,
                             )
                         }
                     }
@@ -307,6 +309,7 @@ private fun CodeBlockDefault(
     autoWrap: Boolean,
     showLineNumbers: Boolean,
     scrollState: ScrollState,
+    animateContent: Boolean,
 ) {
     Row(
         modifier = Modifier.then(
@@ -340,10 +343,15 @@ private fun CodeBlockDefault(
 
         // 代码列
         SelectionContainer {
+            val textModifier = if (animateContent) {
+                Modifier.animateContentSize(animationSpec = luneSizeSpring())
+            } else {
+                Modifier
+            }
             HighlightText(
                 code = displayCode,
                 language = language,
-                modifier = Modifier.animateContentSize(animationSpec = luneSizeSpring()),
+                modifier = textModifier,
                 fontSize = textStyle.fontSize,
                 lineHeight = textStyle.lineHeight,
                 colors = colorPalette,
