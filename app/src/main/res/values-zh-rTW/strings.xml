@@ -1804,4 +1804,3 @@
   <string name="setting_page_built_in_tools_image_generation_desc">為支援的 OpenAI Responses 模型啟用內建影像生成工具</string>
   <string name="setting_provider_page_use_service_account">使用 Service Account</string>
 </resources>
-

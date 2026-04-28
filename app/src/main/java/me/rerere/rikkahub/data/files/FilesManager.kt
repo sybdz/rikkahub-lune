@@ -373,6 +373,10 @@ class FilesManager(
                 }
             }
 
+            image.startsWith("/") -> {
+                activityContext.exportImageFile(activity, File(image))
+            }
+
             image.startsWith("http") -> {
                 val connection = (URL(image).openConnection() as HttpURLConnection).apply {
                     requestMethod = "GET"

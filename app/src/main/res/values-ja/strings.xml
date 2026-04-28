@@ -1858,4 +1858,3 @@ mDNSアドレス: .localホスト名を使用し、IPを知らなくても同じ
   <string name="setting_page_built_in_tools_image_generation_desc">対応するOpenAI Responsesモデルで組み込みの画像生成ツールを有効にします</string>
   <string name="setting_provider_page_use_service_account">サービス アカウントを使用</string>
 </resources>
-

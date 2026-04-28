@@ -221,92 +221,94 @@ private fun RequestLogCard(log: LogEntry.RequestLog, onClick: () -> Unit) {
 private fun RequestLogDetail(log: LogEntry.RequestLog) {
     val dateFormat = remember { SimpleDateFormat("yyyy-MM-dd HH:mm:ss.SSS", Locale.getDefault()) }
 
-    LazyColumn(
-        modifier = Modifier.fillMaxWidth(),
-        contentPadding = PaddingValues(16.dp),
-        verticalArrangement = Arrangement.spacedBy(12.dp)
-    ) {
-        item {
-            Text(
-                text = stringResource(R.string.log_page_request_details),
-                style = MaterialTheme.typography.titleMedium,
-                fontWeight = FontWeight.Bold
-            )
-        }
-
-        item {
-            DetailSection(stringResource(R.string.log_page_time), dateFormat.format(Date(log.timestamp)))
-        }
-
-        item {
-            DetailSection(stringResource(R.string.log_page_url), log.url)
-        }
-
-        item {
-            DetailSection(stringResource(R.string.log_page_method), log.method)
-        }
-
-        log.responseCode?.let { code ->
+    SelectionContainer {
+        LazyColumn(
+            modifier = Modifier.fillMaxWidth(),
+            contentPadding = PaddingValues(16.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
             item {
-                DetailSection(stringResource(R.string.log_page_status_code), code.toString())
-            }
-        }
-
-        log.durationMs?.let { duration ->
-            item {
-                DetailSection(stringResource(R.string.log_page_duration), "${duration}ms")
-            }
-        }
-
-        log.error?.let { error ->
-            item {
-                DetailSection(stringResource(R.string.log_page_error_label), error)
-            }
-        }
-
-        if (log.requestHeaders.isNotEmpty()) {
-            item {
-                HorizontalDivider()
                 Text(
-                    text = stringResource(R.string.log_page_request_headers),
-                    style = MaterialTheme.typography.titleSmall,
-                    fontWeight = FontWeight.Bold,
-                    modifier = Modifier.padding(top = 8.dp)
+                    text = stringResource(R.string.log_page_request_details),
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold
                 )
             }
-            log.requestHeaders.forEach { (key, value) ->
+
+            item {
+                DetailSection(stringResource(R.string.log_page_time), dateFormat.format(Date(log.timestamp)))
+            }
+
+            item {
+                DetailSection(stringResource(R.string.log_page_url), log.url)
+            }
+
+            item {
+                DetailSection(stringResource(R.string.log_page_method), log.method)
+            }
+
+            log.responseCode?.let { code ->
                 item {
-                    HeaderItem(key, value)
+                    DetailSection(stringResource(R.string.log_page_status_code), code.toString())
                 }
             }
-        }
 
-        log.requestBody?.let { body ->
-            item {
-                LogBodySection(title = stringResource(R.string.log_page_request_body), body = body)
-            }
-        }
-
-        if (log.responseHeaders.isNotEmpty()) {
-            item {
-                HorizontalDivider()
-                Text(
-                    text = stringResource(R.string.log_page_response_headers),
-                    style = MaterialTheme.typography.titleSmall,
-                    fontWeight = FontWeight.Bold,
-                    modifier = Modifier.padding(top = 8.dp)
-                )
-            }
-            log.responseHeaders.forEach { (key, value) ->
+            log.durationMs?.let { duration ->
                 item {
-                    HeaderItem(key, value)
+                    DetailSection(stringResource(R.string.log_page_duration), "${duration}ms")
                 }
             }
-        }
 
-        log.responseBody?.let { body ->
-            item {
-                LogBodySection(title = stringResource(R.string.log_page_response_body), body = body)
+            log.error?.let { error ->
+                item {
+                    DetailSection(stringResource(R.string.log_page_error_label), error)
+                }
+            }
+
+            if (log.requestHeaders.isNotEmpty()) {
+                item {
+                    HorizontalDivider()
+                    Text(
+                        text = stringResource(R.string.log_page_request_headers),
+                        style = MaterialTheme.typography.titleSmall,
+                        fontWeight = FontWeight.Bold,
+                        modifier = Modifier.padding(top = 8.dp)
+                    )
+                }
+                log.requestHeaders.forEach { (key, value) ->
+                    item {
+                        HeaderItem(key, value)
+                    }
+                }
+            }
+
+            log.requestBody?.let { body ->
+                item {
+                    LogBodySection(title = stringResource(R.string.log_page_request_body), body = body)
+                }
+            }
+
+            if (log.responseHeaders.isNotEmpty()) {
+                item {
+                    HorizontalDivider()
+                    Text(
+                        text = stringResource(R.string.log_page_response_headers),
+                        style = MaterialTheme.typography.titleSmall,
+                        fontWeight = FontWeight.Bold,
+                        modifier = Modifier.padding(top = 8.dp)
+                    )
+                }
+                log.responseHeaders.forEach { (key, value) ->
+                    item {
+                        HeaderItem(key, value)
+                    }
+                }
+            }
+
+            log.responseBody?.let { body ->
+                item {
+                    LogBodySection(title = stringResource(R.string.log_page_response_body), body = body)
+                }
             }
         }
     }
@@ -598,28 +600,30 @@ private fun TextLogCard(log: LogEntry.TextLog) {
         modifier = Modifier.fillMaxWidth(),
         colors = CustomColors.cardColorsOnSurfaceContainer,
     ) {
-        Column(modifier = Modifier.padding(12.dp)) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween
-            ) {
+        SelectionContainer {
+            Column(modifier = Modifier.padding(12.dp)) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Text(
+                        text = log.tag,
+                        style = MaterialTheme.typography.labelSmall,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.primary
+                    )
+                    Text(
+                        text = dateFormat.format(Date(log.timestamp)),
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
                 Text(
-                    text = log.tag,
-                    style = MaterialTheme.typography.labelSmall,
-                    fontWeight = FontWeight.Bold,
-                    color = MaterialTheme.colorScheme.primary
-                )
-                Text(
-                    text = dateFormat.format(Date(log.timestamp)),
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                    text = log.message,
+                    style = MaterialTheme.typography.bodySmall,
+                    fontFamily = JetbrainsMono
                 )
             }
-            Text(
-                text = log.message,
-                style = MaterialTheme.typography.bodySmall,
-                fontFamily = JetbrainsMono
-            )
         }
     }
 }

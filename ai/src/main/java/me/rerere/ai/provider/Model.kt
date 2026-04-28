@@ -57,4 +57,3 @@ sealed class BuiltInTools {
     data object ImageGeneration : BuiltInTools()
 }
 
-

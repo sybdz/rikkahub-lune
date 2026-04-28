@@ -299,7 +299,7 @@ private fun SettingProviderConfigPage(
                         showDeleteDialog = true
                     },
                 ) {
-                    Icon(HugeIcons.Delete01, "Delete")
+                    Icon(HugeIcons.Delete01, null)
                 }
             }
 
