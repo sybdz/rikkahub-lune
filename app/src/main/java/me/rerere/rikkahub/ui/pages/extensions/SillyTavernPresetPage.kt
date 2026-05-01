@@ -136,8 +136,7 @@ private fun SillyTavernPresetPageContent(
             presets.filter { preset ->
                 preset.displayName.contains(query, ignoreCase = true) ||
                     preset.template.prompts.any { prompt ->
-                        prompt.name.contains(query, ignoreCase = true) ||
-                            prompt.identifier.contains(query, ignoreCase = true)
+                        prompt.name.contains(query, ignoreCase = true)
                     }
             }
         }

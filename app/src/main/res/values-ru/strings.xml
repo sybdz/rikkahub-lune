@@ -1447,12 +1447,12 @@
   <string name="prompt_page_st_preset_editor_no_override">Без переопределения</string>
   <string name="prompt_page_st_preset_editor_edit_item">Редактировать элемент промпта</string>
   <string name="prompt_page_st_preset_editor_enabled_desc">Если отключено, определение сохраняется, но исключается из порядка промпта.</string>
-  <string name="prompt_page_st_preset_editor_identifier">Идентификатор</string>
-  <string name="prompt_page_st_preset_editor_identifier_duplicate_hint">Если идентификатор пустой или дублирует уже существующий элемент, сохраняется исходное значение.</string>
+  <string name="prompt_page_st_preset_editor_builtin_slot">Встроенный слот</string>
+  <string name="prompt_page_st_preset_editor_builtin_slot_desc">Выберите встроенный источник содержимого для этого элемента.</string>
   <string name="prompt_page_st_preset_editor_display_name">Отображаемое имя</string>
+  <string name="prompt_page_st_preset_editor_custom_prompt_fallback">Пользовательский промпт</string>
   <string name="prompt_page_st_preset_editor_depth">Глубина</string>
   <string name="prompt_page_st_preset_editor_order">Порядок</string>
-  <string name="prompt_page_st_preset_editor_trigger_types">Типы триггеров</string>
   <string name="prompt_page_st_preset_editor_prompt_content">Содержимое запроса</string>
   <string name="prompt_page_st_preset_editor_delete_item">Удалить этот элемент</string>
   <string name="prompt_page_st_preset_editor_marker_preview">Узел-маркер. Текст запроса напрямую не подставляется.</string>
@@ -1465,10 +1465,6 @@
   <string name="prompt_page_st_preset_editor_role_assistant">Ассистент</string>
   <string name="prompt_page_st_preset_editor_position_relative">Относительное</string>
   <string name="prompt_page_st_preset_editor_position_absolute">Абсолютное</string>
-  <string name="prompt_page_st_preset_editor_trigger_normal">Обычный</string>
-  <string name="prompt_page_st_preset_editor_trigger_continue">Продолжить</string>
-  <string name="prompt_page_st_preset_editor_trigger_quiet">Тихий</string>
-  <string name="prompt_page_st_preset_editor_trigger_impersonate">Имитация</string>
   <string name="assistant_page_regex_find_regex_placeholder">e.g. \\b\\w+@\\w+\\.\\w+\\b</string>
   <string name="assistant_page_regex_help_body">Regex rules let you rewrite text before it is displayed, before it is sent to the model, or both.\n\nTypical use cases:\n- Clean up imported SillyTavern formatting.\n- Hide boilerplate in the UI without changing saved messages.\n- Normalize names or punctuation before the model sees them.\n- Apply ST script placements such as user input, AI output, world info, slash commands, or reasoning.\n\nTips:\n- Find Regex is a real regular expression.\n- Replace String supports syntax like $1, ${name}, $&lt;name&gt;, and {{match}}.\n- Trim captured strings removes extra text from captured groups before replacement is written back.\n- RAW and ESCAPED substitution resolve macros like {{char}} and {{user}} inside the regex itself.\n- If ST Placements is not empty, those placements override the generic scopes above.</string>
   <string name="assistant_page_regex_help_title">Regex Guide</string>
@@ -1804,9 +1800,7 @@
   <string name="assistant_page_sampling_desc_google">Отправляется внутри generationConfig для совместимых с Gemini или Vertex бэкендов.</string>
   <string name="assistant_page_sampling_desc_claude">Отправляется как поля Anthropic Messages API.</string>
   <string name="assistant_page_sampling_desc_compat">Используются только поля, поддерживаемые выбранным бэкендом.</string>
-  <string name="prompt_page_st_preset_editor_builtin_identifier_desc">Встроенные элементы используют предопределённые слоты. Выбирайте их из списка вместо ввода идентификаторов вручную.</string>
   <string name="prompt_page_st_preset_editor_display_name_desc">Влияет только на отображение в списке, поиск и метаданные экспорта. На способ подстановки этого промпта не влияет.</string>
-  <string name="prompt_page_st_preset_editor_trigger_types_desc">Сейчас приложение использует только `normal` и `continue`. `quiet` сохраняется в основном для совместимости с ST и экспорта. `impersonate` имеет значение только тогда, когда режим совместимости явно использует этот режим.</string>
   <string name="prompt_page_st_preset_editor_source_preview">Источник содержимого: %1$s</string>
   <string name="prompt_page_st_preset_editor_source_backed_desc">Содержимое этого встроенного элемента берётся из %1$s. Редактируйте исходную страницу вместо ввода текста промпта здесь.</string>
   <string name="prompt_page_st_preset_editor_source_character_description">описание персонажа в карточке</string>
@@ -1822,7 +1816,7 @@
   <string name="prompt_page_st_preset_editor_compat_metadata_title">Метаданные совместимости</string>
   <string name="prompt_page_st_preset_editor_system_prompt_metadata_label">Системный промпт (метаданные ST)</string>
   <string name="prompt_page_st_preset_editor_marker_metadata_label">Маркер (метаданные ST)</string>
-  <string name="prompt_page_st_preset_editor_compat_flags_desc">Эти значения сохраняются для совместимости с ST, отображения и экспорта. Здесь они не редактируются как обычные параметры рантайма. В текущем рантайме приложения на поведение реально влияют поля `role`, `identifier` и настройки внедрения.</string>
+  <string name="prompt_page_st_preset_editor_compat_flags_desc">Эти значения сохраняются для совместимости с ST и экспорта. Здесь они не редактируются как обычные параметры рантайма. В текущем рантайме приложения на поведение реально влияют роль и настройки внедрения.</string>
   <string name="prompt_page_st_preset_editor_system_prompt_metadata_tag">Сист. мета</string>
   <string name="prompt_page_st_preset_editor_marker_metadata_tag">Мета маркера</string>
   <string name="setting_mcp_page_stdio">Termux Stdio</string>

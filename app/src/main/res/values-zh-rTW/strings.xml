@@ -1459,12 +1459,12 @@
   <string name="prompt_page_st_preset_editor_no_override">不覆寫</string>
   <string name="prompt_page_st_preset_editor_edit_item">編輯提示項目</string>
   <string name="prompt_page_st_preset_editor_enabled_desc">若停用，會保留此定義，但不會包含在提示順序中。</string>
-  <string name="prompt_page_st_preset_editor_identifier">識別碼</string>
-  <string name="prompt_page_st_preset_editor_identifier_duplicate_hint">若識別碼為空白或與既有項目重複，將保留原始值。</string>
+  <string name="prompt_page_st_preset_editor_builtin_slot">內建槽位</string>
+  <string name="prompt_page_st_preset_editor_builtin_slot_desc">選擇這個項目對應的內建內容來源。</string>
   <string name="prompt_page_st_preset_editor_display_name">顯示名稱</string>
+  <string name="prompt_page_st_preset_editor_custom_prompt_fallback">自訂提示詞</string>
   <string name="prompt_page_st_preset_editor_depth">深度</string>
   <string name="prompt_page_st_preset_editor_order">順序</string>
-  <string name="prompt_page_st_preset_editor_trigger_types">觸發類型</string>
   <string name="prompt_page_st_preset_editor_prompt_content">提示內容</string>
   <string name="prompt_page_st_preset_editor_delete_item">刪除此項目</string>
   <string name="prompt_page_st_preset_editor_marker_preview">標記節點。不會直接插入提示文字。</string>
@@ -1477,10 +1477,6 @@
   <string name="prompt_page_st_preset_editor_role_assistant">助理</string>
   <string name="prompt_page_st_preset_editor_position_relative">相對</string>
   <string name="prompt_page_st_preset_editor_position_absolute">絕對</string>
-  <string name="prompt_page_st_preset_editor_trigger_normal">一般</string>
-  <string name="prompt_page_st_preset_editor_trigger_continue">繼續</string>
-  <string name="prompt_page_st_preset_editor_trigger_quiet">靜默</string>
-  <string name="prompt_page_st_preset_editor_trigger_impersonate">扮演</string>
   <string name="assistant_page_regex_find_regex_placeholder">e.g. \\b\\w+@\\w+\\.\\w+\\b</string>
   <string name="assistant_page_regex_help_body">Regex rules let you rewrite text before it is displayed, before it is sent to the model, or both.\n\nTypical use cases:\n- Clean up imported SillyTavern formatting.\n- Hide boilerplate in the UI without changing saved messages.\n- Normalize names or punctuation before the model sees them.\n- Apply ST script placements such as user input, AI output, world info, slash commands, or reasoning.\n\nTips:\n- Find Regex is a real regular expression.\n- Replace String supports syntax like $1, ${name}, $&lt;name&gt;, and {{match}}.\n- Trim captured strings removes extra text from captured groups before replacement is written back.\n- RAW and ESCAPED substitution resolve macros like {{char}} and {{user}} inside the regex itself.\n- If ST Placements is not empty, those placements override the generic scopes above.</string>
   <string name="assistant_page_regex_help_title">Regex Guide</string>

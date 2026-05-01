@@ -1447,12 +1447,12 @@ mDNSアドレス: .localホスト名を使用し、IPを知らなくても同じ
   <string name="prompt_page_st_preset_editor_no_override">オーバーライドなし</string>
   <string name="prompt_page_st_preset_editor_edit_item">プロンプト項目を編集</string>
   <string name="prompt_page_st_preset_editor_enabled_desc">無効にしても定義自体は保持されますが、プロンプトの順序からは除外されます。</string>
-  <string name="prompt_page_st_preset_editor_identifier">識別子</string>
-  <string name="prompt_page_st_preset_editor_identifier_duplicate_hint">識別子が空、または既存の項目と重複している場合、元の値が保持されます。</string>
+  <string name="prompt_page_st_preset_editor_builtin_slot">組み込みスロット</string>
+  <string name="prompt_page_st_preset_editor_builtin_slot_desc">この項目が対応する組み込みの内容ソースを選択します。</string>
   <string name="prompt_page_st_preset_editor_display_name">表示名</string>
+  <string name="prompt_page_st_preset_editor_custom_prompt_fallback">カスタムプロンプト</string>
   <string name="prompt_page_st_preset_editor_depth">深さ</string>
   <string name="prompt_page_st_preset_editor_order">順序</string>
-  <string name="prompt_page_st_preset_editor_trigger_types">トリガータイプ</string>
   <string name="prompt_page_st_preset_editor_prompt_content">プロンプト内容</string>
   <string name="prompt_page_st_preset_editor_delete_item">この項目を削除</string>
   <string name="prompt_page_st_preset_editor_marker_preview">マーカーノード。プロンプト文は直接挿入されません。</string>
@@ -1465,10 +1465,6 @@ mDNSアドレス: .localホスト名を使用し、IPを知らなくても同じ
   <string name="prompt_page_st_preset_editor_role_assistant">アシスタント</string>
   <string name="prompt_page_st_preset_editor_position_relative">相対</string>
   <string name="prompt_page_st_preset_editor_position_absolute">絶対</string>
-  <string name="prompt_page_st_preset_editor_trigger_normal">通常</string>
-  <string name="prompt_page_st_preset_editor_trigger_continue">続行</string>
-  <string name="prompt_page_st_preset_editor_trigger_quiet">静音</string>
-  <string name="prompt_page_st_preset_editor_trigger_impersonate">なりきり</string>
   <string name="assistant_page_regex_find_regex_placeholder">e.g. \\b\\w+@\\w+\\.\\w+\\b</string>
   <string name="assistant_page_regex_help_body">Regex rules let you rewrite text before it is displayed, before it is sent to the model, or both.\n\nTypical use cases:\n- Clean up imported SillyTavern formatting.\n- Hide boilerplate in the UI without changing saved messages.\n- Normalize names or punctuation before the model sees them.\n- Apply ST script placements such as user input, AI output, world info, slash commands, or reasoning.\n\nTips:\n- Find Regex is a real regular expression.\n- Replace String supports syntax like $1, ${name}, $&lt;name&gt;, and {{match}}.\n- Trim captured strings removes extra text from captured groups before replacement is written back.\n- RAW and ESCAPED substitution resolve macros like {{char}} and {{user}} inside the regex itself.\n- If ST Placements is not empty, those placements override the generic scopes above.</string>
   <string name="assistant_page_regex_help_title">Regex Guide</string>
@@ -1804,9 +1800,7 @@ mDNSアドレス: .localホスト名を使用し、IPを知らなくても同じ
   <string name="assistant_page_sampling_desc_google">Gemini または Vertex 対応バックエンドでは、generationConfig 内で送信されます。</string>
   <string name="assistant_page_sampling_desc_claude">Anthropic Messages API のフィールドとして送信されます。</string>
   <string name="assistant_page_sampling_desc_compat">選択したバックエンドでサポートされているフィールドのみ使用されます。</string>
-  <string name="prompt_page_st_preset_editor_builtin_identifier_desc">組み込み項目は定義済みスロットを使います。生の識別子を入力する代わりに一覧から選択してください。</string>
   <string name="prompt_page_st_preset_editor_display_name_desc">一覧表示、検索、エクスポートメタデータにのみ影響します。このプロンプトの挿入方法自体は変わりません。</string>
-  <string name="prompt_page_st_preset_editor_trigger_types_desc">現在のアプリは `normal` と `continue` を出力します。`quiet` は主に ST 互換性とエクスポートのために保持されます。`impersonate` は互換パスがそのモードを明示的に使う場合にのみ意味を持ちます。</string>
   <string name="prompt_page_st_preset_editor_source_preview">内容の取得元: %1$s</string>
   <string name="prompt_page_st_preset_editor_source_backed_desc">この組み込み項目の内容は %1$s から取得されます。ここでプロンプト文を入力する代わりに、元のページを編集してください。</string>
   <string name="prompt_page_st_preset_editor_source_character_description">カード内のキャラクター説明</string>
@@ -1822,7 +1816,7 @@ mDNSアドレス: .localホスト名を使用し、IPを知らなくても同じ
   <string name="prompt_page_st_preset_editor_compat_metadata_title">互換メタデータ</string>
   <string name="prompt_page_st_preset_editor_system_prompt_metadata_label">システムプロンプト（ST メタデータ）</string>
   <string name="prompt_page_st_preset_editor_marker_metadata_label">マーカー（ST メタデータ）</string>
-  <string name="prompt_page_st_preset_editor_compat_flags_desc">これらの値は ST 互換性、表示、エクスポートのために保持されます。ここでは通常の実行時コントロールとして編集されません。現在のアプリ実行時で実際に挙動へ影響するのは、`role`、`identifier`、および注入設定です。</string>
+  <string name="prompt_page_st_preset_editor_compat_flags_desc">これらの値は ST 互換性とエクスポートのために保持されます。ここでは通常の実行時コントロールとして編集されません。現在のアプリ実行時で実際に挙動へ影響するのは、ロールと注入設定です。</string>
   <string name="prompt_page_st_preset_editor_system_prompt_metadata_tag">システムメタ</string>
   <string name="prompt_page_st_preset_editor_marker_metadata_tag">マーカーメタ</string>
   <string name="setting_mcp_page_stdio">Termux Stdio</string>

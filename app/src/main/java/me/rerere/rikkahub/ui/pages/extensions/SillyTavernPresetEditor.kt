@@ -79,7 +79,6 @@ import me.rerere.rikkahub.ui.hooks.useEditState
 import me.rerere.rikkahub.ui.theme.CustomColors
 import sh.calvin.reorderable.ReorderableColumn
 
-private val stPromptGenerationTypes = listOf("normal", "continue", "quiet", "impersonate")
 private val stNamesBehaviorOptions = listOf<Int?>(null, -1, 0, 1, 2)
 
 private enum class StBuiltInPromptSourceKind {
@@ -318,7 +317,7 @@ fun SillyTavernPresetEditorCard(
                         )
                         StFeatureGuideRow(
                             title = "提示词顺序和定义",
-                            body = "这里对应 ST 的 prompts + prompt_order。你可以决定哪些模块启用、以什么顺序注入，以及 normal / continue / impersonate 等场景分别使用什么内容。"
+                            body = "这里对应 ST 的 prompts + prompt_order。你可以决定哪些模块启用、以什么顺序注入，以及每个模块要使用什么内容。"
                         )
                     }
                 }
@@ -911,11 +910,6 @@ private fun StPromptListItem(
                             Text(stringResource(R.string.prompt_page_st_preset_editor_no_override))
                         }
                     }
-                    if (prompt.injectionTriggers.isNotEmpty()) {
-                        Tag(type = TagType.SUCCESS) {
-                            Text(stPromptTriggerLabels(prompt.injectionTriggers))
-                        }
-                    }
                 }
             }
 
@@ -1030,7 +1024,7 @@ private fun StPromptEditSheet(
                         verticalArrangement = Arrangement.spacedBy(6.dp)
                     ) {
                         Text(
-                            text = stringResource(R.string.prompt_page_st_preset_editor_identifier),
+                            text = stringResource(R.string.prompt_page_st_preset_editor_builtin_slot),
                             style = MaterialTheme.typography.labelMedium
                         )
                         Select(
@@ -1052,29 +1046,9 @@ private fun StPromptEditSheet(
                             }
                         )
                         StEditorHint(
-                            text = stringResource(R.string.prompt_page_st_preset_editor_builtin_identifier_desc)
+                            text = stringResource(R.string.prompt_page_st_preset_editor_builtin_slot_desc)
                         )
                     }
-                } else {
-                    OutlinedTextField(
-                        value = state.prompt.identifier,
-                        onValueChange = { value ->
-                            onEdit(
-                                state.copy(
-                                    prompt = state.prompt.copy(identifier = value)
-                                )
-                            )
-                        },
-                        modifier = Modifier.fillMaxWidth(),
-                        label = { Text(stringResource(R.string.prompt_page_st_preset_editor_identifier)) },
-                        singleLine = true,
-                    )
-
-                    Text(
-                        text = stringResource(R.string.prompt_page_st_preset_editor_identifier_duplicate_hint),
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
                 }
 
                 OutlinedTextField(
@@ -1167,43 +1141,6 @@ private fun StPromptEditSheet(
                         )
                     }
                 }
-
-                Column(
-                    verticalArrangement = Arrangement.spacedBy(6.dp)
-                ) {
-                    Text(
-                        text = stringResource(R.string.prompt_page_st_preset_editor_trigger_types),
-                        style = MaterialTheme.typography.labelMedium
-                    )
-                    FlowRow(
-                        horizontalArrangement = Arrangement.spacedBy(8.dp),
-                        verticalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        stPromptGenerationTypes.fastForEach { trigger ->
-                            val selected = trigger in state.prompt.injectionTriggers
-                            Tag(
-                                type = if (selected) TagType.INFO else TagType.DEFAULT,
-                                onClick = {
-                                    val updatedTriggers = if (selected) {
-                                        state.prompt.injectionTriggers - trigger
-                                    } else {
-                                        (state.prompt.injectionTriggers + trigger).distinct()
-                                    }
-                                    onEdit(
-                                        state.copy(
-                                            prompt = state.prompt.copy(injectionTriggers = updatedTriggers)
-                                        )
-                                    )
-                                }
-                            ) {
-                                Text(stringResource(stPromptGenerationTypeLabelRes(trigger)))
-                            }
-                        }
-                    }
-                }
-                StEditorHint(
-                    text = stringResource(R.string.prompt_page_st_preset_editor_trigger_types_desc)
-                )
 
                 if (state.prompt.systemPrompt || state.prompt.marker) {
                     Column(
@@ -1533,14 +1470,20 @@ private fun defaultStPromptDefinition(identifier: String): SillyTavernPromptItem
         )
 }
 
+@Composable
 private fun stPromptDisplayName(prompt: SillyTavernPromptItem): String {
-    return prompt.name.ifBlank { defaultStPromptDefinition(prompt.identifier).name.ifBlank { prompt.identifier } }
+    return prompt.name.ifBlank {
+        stBuiltInPromptDefinition(prompt.identifier)?.prompt?.name
+            ?: stringResource(R.string.prompt_page_st_preset_editor_custom_prompt_fallback)
+    }
 }
 
 @Composable
 private fun stPromptSummary(prompt: SillyTavernPromptItem): String {
     return buildList {
-        add(prompt.identifier)
+        stPromptSourceLabelResOrNull(prompt.identifier)?.let { sourceLabel ->
+            add(stringResource(sourceLabel))
+        }
         add(stringResource(stRoleLabelRes(prompt.role)))
         if (prompt.injectionPosition == StPromptInjectionPosition.ABSOLUTE) {
             add(stringResource(R.string.prompt_page_st_preset_editor_depth_value, prompt.injectionDepth))
@@ -1560,15 +1503,6 @@ private fun stPromptPreview(prompt: SillyTavernPromptItem): String {
         prompt.marker -> stringResource(R.string.prompt_page_st_preset_editor_marker_preview)
         else -> stringResource(R.string.prompt_page_st_preset_editor_empty_content_preview)
     }
-}
-
-@Composable
-private fun stPromptTriggerLabels(triggers: List<String>): String {
-    val labels = mutableListOf<String>()
-    for (trigger in triggers) {
-        labels += stringResource(stPromptGenerationTypeLabelRes(trigger))
-    }
-    return labels.joinToString(" / ")
 }
 
 private fun stBuiltInPromptDefinition(identifier: String): StBuiltInPromptDefinition? {
@@ -1627,6 +1561,12 @@ private fun stRoleLabelRes(role: MessageRole): Int {
 
 @StringRes
 private fun stPromptSourceLabelRes(identifier: String): Int {
+    return stPromptSourceLabelResOrNull(identifier)
+        ?: R.string.prompt_page_st_preset_editor_prompt_content
+}
+
+@StringRes
+private fun stPromptSourceLabelResOrNull(identifier: String): Int? {
     return when (stBuiltInPromptDefinition(identifier)?.sourceKind) {
         StBuiltInPromptSourceKind.CHARACTER_DESCRIPTION -> R.string.prompt_page_st_preset_editor_source_character_description
         StBuiltInPromptSourceKind.CHARACTER_PERSONALITY -> R.string.prompt_page_st_preset_editor_source_character_personality
@@ -1635,7 +1575,7 @@ private fun stPromptSourceLabelRes(identifier: String): Int {
         StBuiltInPromptSourceKind.WORLD_INFO -> R.string.prompt_page_st_preset_editor_source_world_info
         StBuiltInPromptSourceKind.DIALOGUE_EXAMPLES -> R.string.prompt_page_st_preset_editor_source_dialogue_examples
         StBuiltInPromptSourceKind.CHAT_HISTORY -> R.string.prompt_page_st_preset_editor_source_chat_history
-        null -> R.string.prompt_page_st_preset_editor_prompt_content
+        null -> null
     }
 }
 
@@ -1644,17 +1584,6 @@ private fun stInjectionPositionLabelRes(position: StPromptInjectionPosition): In
     return when (position) {
         StPromptInjectionPosition.RELATIVE -> R.string.prompt_page_st_preset_editor_position_relative
         StPromptInjectionPosition.ABSOLUTE -> R.string.prompt_page_st_preset_editor_position_absolute
-    }
-}
-
-@StringRes
-private fun stPromptGenerationTypeLabelRes(trigger: String): Int {
-    return when (trigger) {
-        "normal" -> R.string.prompt_page_st_preset_editor_trigger_normal
-        "continue" -> R.string.prompt_page_st_preset_editor_trigger_continue
-        "quiet" -> R.string.prompt_page_st_preset_editor_trigger_quiet
-        "impersonate" -> R.string.prompt_page_st_preset_editor_trigger_impersonate
-        else -> R.string.prompt_page_st_preset_editor_trigger_normal
     }
 }
 
