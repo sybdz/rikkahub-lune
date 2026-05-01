@@ -12,7 +12,6 @@ import me.rerere.rikkahub.data.model.LorebookGlobalSettings
 import me.rerere.rikkahub.data.model.PromptInjection
 import me.rerere.rikkahub.data.model.SillyTavernCharacterData
 import me.rerere.rikkahub.data.model.StDepthPrompt
-import me.rerere.rikkahub.data.model.WorldInfoCharacterStrategy
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
@@ -104,15 +103,11 @@ class PromptInjectionTransformerTest {
         id: Uuid = Uuid.random(),
         name: String = "Test Lorebook",
         enabled: Boolean = true,
-        recursiveScanning: Boolean = false,
-        tokenBudget: Int? = null,
         entries: List<PromptInjection.RegexInjection> = emptyList()
     ) = Lorebook(
         id = id,
         name = name,
         enabled = enabled,
-        recursiveScanning = recursiveScanning,
-        tokenBudget = tokenBudget,
         entries = entries
     )
 
@@ -1049,7 +1044,6 @@ class PromptInjectionTransformerTest {
         )
         val lorebook = createLorebook(
             id = lorebookId,
-            recursiveScanning = true,
             entries = listOf(seedEntry, chainedEntry)
         )
 
@@ -1083,7 +1077,6 @@ class PromptInjectionTransformerTest {
         )
         val lorebook = createLorebook(
             id = lorebookId,
-            recursiveScanning = true,
             entries = listOf(seedEntry, chainedEntry)
         )
 
@@ -1137,11 +1130,10 @@ class PromptInjectionTransformerTest {
     }
 
     @Test
-    fun `lorebook token budget should count ignore budget entries`() {
+    fun `lorebook should ignore imported budget metadata`() {
         val lorebookId = Uuid.random()
         val lorebook = createLorebook(
             id = lorebookId,
-            tokenBudget = 2,
             entries = listOf(
                 createRegexInjection(
                     keywords = emptyList(),
@@ -1175,8 +1167,8 @@ class PromptInjectionTransformerTest {
 
         val systemText = getMessageText(result[0])
         assertTrue(systemText.contains("alpha beta"))
-        assertTrue(!systemText.contains("epsilon"))
-        assertTrue(!systemText.contains("gamma delta"))
+        assertTrue(systemText.contains("epsilon"))
+        assertTrue(systemText.contains("gamma delta"))
     }
 
     @Test
@@ -1793,8 +1785,6 @@ class PromptInjectionTransformerTest {
             settings = Settings(
                 lorebookGlobalSettings = LorebookGlobalSettings(
                     scanDepth = 1,
-                    minActivations = 1,
-                    minActivationsDepthMax = 3,
                 )
             ),
             modeInjections = emptyList(),
@@ -1805,7 +1795,7 @@ class PromptInjectionTransformerTest {
     }
 
     @Test
-    fun `character strategy should change which scoped lorebook entry wins shared budget`() {
+    fun `scoped lorebook selection should prefer character entries before global entries`() {
         val characterEntry = createRegexInjection(
             priority = 10,
             position = InjectionPosition.BEFORE_SYSTEM_PROMPT,
@@ -1823,26 +1813,16 @@ class PromptInjectionTransformerTest {
             constantActive = true,
         )
 
-        fun selectedWithStrategy(strategy: WorldInfoCharacterStrategy) = selectTriggeredLorebookEntries(
+        val selected = selectTriggeredLorebookEntries(
             entries = listOf(
                 ActivatedLorebookEntry(characterEntry, LorebookScope.CHARACTER),
                 ActivatedLorebookEntry(globalEntry, LorebookScope.GLOBAL),
             ),
-            budget = 1,
-            strategy = strategy,
         )
 
         assertEquals(
-            listOf(characterEntry.id),
-            selectedWithStrategy(WorldInfoCharacterStrategy.CHARACTER_FIRST).map { it.id },
-        )
-        assertEquals(
-            listOf(globalEntry.id),
-            selectedWithStrategy(WorldInfoCharacterStrategy.GLOBAL_FIRST).map { it.id },
-        )
-        assertEquals(
-            listOf(globalEntry.id),
-            selectedWithStrategy(WorldInfoCharacterStrategy.EVENLY).map { it.id },
+            listOf(characterEntry.id, globalEntry.id),
+            selected.map { it.id },
         )
     }
 
@@ -1857,10 +1837,6 @@ class PromptInjectionTransformerTest {
             assistant = createAssistant(),
             settings = Settings(
                 globalLorebookIds = setOf(globalLorebookId),
-                lorebookGlobalSettings = LorebookGlobalSettings(
-                    budgetPercent = 0,
-                    budgetCap = 16,
-                ),
             ),
             modeInjections = emptyList(),
             lorebooks = listOf(
@@ -1884,7 +1860,7 @@ class PromptInjectionTransformerTest {
     }
 
     @Test
-    fun `shared lorebook budget should allow exact token fit`() {
+    fun `linked lorebooks should all inject triggered entries`() {
         val firstLorebookId = Uuid.random()
         val secondLorebookId = Uuid.random()
         val assistant = createAssistant(lorebookIds = setOf(firstLorebookId, secondLorebookId))
@@ -1897,10 +1873,6 @@ class PromptInjectionTransformerTest {
             assistant = assistant,
             settings = Settings(
                 assistants = listOf(assistant),
-                lorebookGlobalSettings = LorebookGlobalSettings(
-                    budgetPercent = 0,
-                    budgetCap = 2,
-                ),
             ),
             modeInjections = emptyList(),
             lorebooks = listOf(
@@ -1937,7 +1909,7 @@ class PromptInjectionTransformerTest {
     }
 
     @Test
-    fun `lorebook local budget should allow exact token fit across candidates`() {
+    fun `single lorebook should inject all triggered entries`() {
         val lorebookId = Uuid.random()
         val result = transformMessages(
             messages = listOf(
@@ -1949,7 +1921,6 @@ class PromptInjectionTransformerTest {
             lorebooks = listOf(
                 createLorebook(
                     id = lorebookId,
-                    tokenBudget = 2,
                     entries = listOf(
                         createRegexInjection(
                             priority = 10,

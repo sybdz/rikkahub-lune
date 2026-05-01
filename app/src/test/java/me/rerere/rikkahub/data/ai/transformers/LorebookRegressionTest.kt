@@ -7,7 +7,6 @@ import me.rerere.rikkahub.data.model.Lorebook
 import me.rerere.rikkahub.data.model.LorebookTriggerContext
 import me.rerere.rikkahub.data.model.PromptInjection
 import me.rerere.rikkahub.data.model.StLorebookEntryExtension
-import me.rerere.rikkahub.data.model.WorldInfoCharacterStrategy
 import me.rerere.rikkahub.data.model.matchesTriggerKeywords
 import me.rerere.rikkahub.data.model.withStExtension
 import org.junit.Assert.assertEquals
@@ -18,120 +17,60 @@ import kotlin.uuid.Uuid
 class LorebookRegressionTest {
 
     @Test
-    fun `shared lorebook budget should keep scanning after an oversized entry`() {
-        val oversizedEntry = regexEntry(
+    fun `shared lorebook selection should keep all triggered entries`() {
+        val highPriorityEntry = regexEntry(
             priority = 200,
             content = tokenContent(120),
         )
-        val fittingEntry = regexEntry(
+        val lowPriorityEntry = regexEntry(
             priority = 100,
             content = tokenContent(50),
         )
 
         val selected = selectTriggeredLorebookEntries(
             entries = listOf(
-                ActivatedLorebookEntry(oversizedEntry, LorebookScope.CHARACTER),
-                ActivatedLorebookEntry(fittingEntry, LorebookScope.CHARACTER),
+                ActivatedLorebookEntry(highPriorityEntry, LorebookScope.CHARACTER),
+                ActivatedLorebookEntry(lowPriorityEntry, LorebookScope.CHARACTER),
             ),
-            budget = 100,
-            strategy = WorldInfoCharacterStrategy.EVENLY,
         )
 
-        assertEquals(listOf(fittingEntry.id), selected.map { it.id })
+        assertEquals(listOf(highPriorityEntry.id, lowPriorityEntry.id), selected.map { it.id })
     }
 
     @Test
-    fun `local lorebook budget should keep scanning after an oversized entry`() {
-        val oversizedEntry = regexEntry(
-            priority = 200,
-            content = tokenContent(120),
-        )
-        val fittingEntry = regexEntry(
-            priority = 100,
-            content = tokenContent(50),
-        )
-
-        val selected = selectBudgetedCandidates(
-            candidates = listOf(
-                LorebookCandidate(entry = oversizedEntry, isSticky = false, score = 0),
-                LorebookCandidate(entry = fittingEntry, isSticky = false, score = 0),
-            ),
-            budget = 100,
-            activatedEntries = emptyList(),
-        )
-
-        assertEquals(listOf(fittingEntry.id), selected.map { it.id })
-    }
-
-    @Test
-    fun `shared lorebook budget should count imported ignore budget metadata`() {
-        val ignoredEntry = regexEntry(
-            priority = 200,
-            content = tokenContent(120),
-            ignoreBudget = true,
-        )
-        val fittingEntry = regexEntry(
-            priority = 100,
-            content = tokenContent(100),
-        )
+    fun `shared lorebook selection should prefer character scope before global scope`() {
+        val characterEntry = regexEntry(priority = 10, content = "character")
+        val globalEntry = regexEntry(priority = 100, content = "global")
 
         val selected = selectTriggeredLorebookEntries(
             entries = listOf(
-                ActivatedLorebookEntry(ignoredEntry, LorebookScope.CHARACTER),
-                ActivatedLorebookEntry(fittingEntry, LorebookScope.CHARACTER),
+                ActivatedLorebookEntry(globalEntry, LorebookScope.GLOBAL),
+                ActivatedLorebookEntry(characterEntry, LorebookScope.CHARACTER),
             ),
-            budget = 100,
-            strategy = WorldInfoCharacterStrategy.EVENLY,
         )
 
-        assertEquals(listOf(fittingEntry.id), selected.map { it.id })
+        assertEquals(listOf(characterEntry.id, globalEntry.id), selected.map { it.id })
     }
 
     @Test
-    fun `local lorebook budget should count imported ignore budget metadata`() {
-        val ignoredEntry = regexEntry(
+    fun `local lorebook selection should keep priority order`() {
+        val highPriorityEntry = regexEntry(
             priority = 200,
-            content = tokenContent(120),
-            ignoreBudget = true,
+            content = tokenContent(50),
         )
-        val fittingEntry = regexEntry(
+        val lowPriorityEntry = regexEntry(
             priority = 100,
             content = tokenContent(100),
         )
 
-        val selected = selectBudgetedCandidates(
+        val selected = selectTriggeredCandidates(
             candidates = listOf(
-                LorebookCandidate(entry = ignoredEntry, isSticky = false, score = 0),
-                LorebookCandidate(entry = fittingEntry, isSticky = false, score = 0),
+                LorebookCandidate(entry = lowPriorityEntry, isSticky = false),
+                LorebookCandidate(entry = highPriorityEntry, isSticky = false),
             ),
-            budget = 100,
-            activatedEntries = emptyList(),
         )
 
-        assertEquals(listOf(fittingEntry.id), selected.map { it.id })
-    }
-
-    @Test
-    fun `local lorebook budget should count already activated ignore budget metadata`() {
-        val ignoredActivatedEntry = regexEntry(
-            priority = 200,
-            content = tokenContent(120),
-            ignoreBudget = true,
-        )
-        val fittingEntry = regexEntry(
-            priority = 100,
-            content = tokenContent(100),
-        )
-
-        val selected = selectBudgetedCandidates(
-            candidates = listOf(
-                LorebookCandidate(entry = fittingEntry, isSticky = false, score = 0),
-            ),
-            budget = 100,
-            activatedEntries = listOf(ignoredActivatedEntry),
-        )
-
-        assertEquals(emptyList<Uuid>(), selected.map { it.id })
+        assertEquals(listOf(highPriorityEntry.id, lowPriorityEntry.id), selected.map { it.id })
     }
 
     @Test
@@ -216,7 +155,6 @@ class LorebookRegressionTest {
         priority: Int = 0,
         content: String,
         constantActive: Boolean = false,
-        ignoreBudget: Boolean = false,
     ) = PromptInjection.RegexInjection(
         id = Uuid.random(),
         priority = priority,
@@ -224,13 +162,7 @@ class LorebookRegressionTest {
         role = MessageRole.SYSTEM,
         keywords = if (constantActive) emptyList() else listOf("trigger"),
         constantActive = constantActive,
-    ).let { entry ->
-        if (ignoreBudget) {
-            entry.withStExtension(StLorebookEntryExtension(ignoreBudget = true))
-        } else {
-            entry
-        }
-    }
+    )
 
     private fun tokenContent(tokenCount: Int): String {
         return (1..tokenCount).joinToString(" ") { index -> "w$index" }

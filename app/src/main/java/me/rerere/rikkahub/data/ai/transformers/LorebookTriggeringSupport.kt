@@ -70,26 +70,6 @@ internal fun PromptInjection.RegexInjection.delayMessages(): Int? {
     return stExtension().delay?.takeIf { it > 0 }
 }
 
-internal fun PromptInjection.RegexInjection.ignoreBudget(): Boolean {
-    return stExtension().ignoreBudget
-}
-
-internal fun PromptInjection.RegexInjection.groupNames(): List<String> {
-    return stExtension().groupNames()
-}
-
-internal fun PromptInjection.RegexInjection.groupOverride(): Boolean {
-    return stExtension().groupOverride
-}
-
-internal fun PromptInjection.RegexInjection.useGroupScoring(globalSettings: LorebookGlobalSettings): Boolean {
-    return globalSettings.useGroupScoring || stExtension().useGroupScoring
-}
-
-internal fun PromptInjection.RegexInjection.groupWeight(): Int {
-    return stExtension().groupWeight?.takeIf { it > 0 } ?: 100
-}
-
 internal fun hasPendingDelayedRecursionLevel(
     entries: List<PromptInjection.RegexInjection>,
     activatedIds: Set<Uuid>,

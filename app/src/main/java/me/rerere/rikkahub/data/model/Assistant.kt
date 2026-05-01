@@ -756,8 +756,6 @@ data class Lorebook(
     val name: String = "",
     val description: String = "",
     val enabled: Boolean = true,
-    val recursiveScanning: Boolean = false,
-    val tokenBudget: Int? = null,
     val entries: List<PromptInjection.RegexInjection> = emptyList(),
 )
 

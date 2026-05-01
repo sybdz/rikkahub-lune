@@ -166,8 +166,6 @@ object LorebookSerializer : ExportSerializer<Lorebook> {
                 name = fileName ?: LocalDateTime.now().toLocalString(),
                 description = "",
                 enabled = true,
-                recursiveScanning = stLorebook.recursiveScanning ?: false,
-                tokenBudget = stLorebook.tokenBudget,
                 entries = stLorebook.entries.values.map { entry ->
                     val useRegex = entry.useRegex ?: (
                         entry.key.any(::isSlashDelimitedRegex) || entry.secondaryKeys.any(::isSlashDelimitedRegex)
@@ -223,10 +221,6 @@ object LorebookSerializer : ExportSerializer<Lorebook> {
 
 @Serializable
 private data class SillyTavernLorebook(
-    @SerialName("recursive_scanning")
-    val recursiveScanning: Boolean? = null,
-    @SerialName("token_budget")
-    val tokenBudget: Int? = null,
     val entries: Map<String, SillyTavernEntry> = emptyMap(),
 )
 
@@ -245,9 +239,6 @@ private data class SillyTavernEntry(
     val disable: Boolean = false,
     val displayIndex: Int? = null,
     val excludeRecursion: Boolean? = null,
-    val group: String? = null,
-    val groupOverride: Boolean? = null,
-    val groupWeight: Int? = null,
     val preventRecursion: Boolean? = null,
     val sticky: Int? = null,
     val cooldown: Int? = null,
@@ -256,17 +247,13 @@ private data class SillyTavernEntry(
     val useProbability: Boolean? = null,
     val depth: Int = 4,
     val role: Int? = null,
-    val vectorized: Boolean? = null,
     val delayUntilRecursion: JsonElement? = null,
     val scanDepth: Int? = null,
     val caseSensitive: Boolean? = null,
     val matchWholeWords: Boolean? = null,
-    val useGroupScoring: Boolean? = null,
     val triggers: List<String> = emptyList(),
-    val ignoreBudget: Boolean? = null,
     val outletName: String? = null,
     val useRegex: Boolean? = null,
-    val automationId: String? = null,
 )
 
 private fun buildStLorebookMetadata(
@@ -274,10 +261,6 @@ private fun buildStLorebookMetadata(
     useProbability: Boolean,
 ): Map<String, String> {
     return StLorebookEntryExtension(
-        group = entry.group.orEmpty(),
-        groupOverride = entry.groupOverride ?: false,
-        groupWeight = entry.groupWeight,
-        useGroupScoring = entry.useGroupScoring ?: false,
         sticky = entry.sticky,
         cooldown = entry.cooldown,
         delay = entry.delay,
@@ -285,11 +268,8 @@ private fun buildStLorebookMetadata(
         triggers = entry.triggers,
         outletName = entry.outletName.orEmpty(),
         useProbability = useProbability,
-        ignoreBudget = entry.ignoreBudget ?: false,
         excludeRecursion = entry.excludeRecursion ?: false,
         preventRecursion = entry.preventRecursion ?: false,
-        vectorized = entry.vectorized ?: false,
-        automationId = entry.automationId.orEmpty(),
         extra = buildMap {
             putIfPresent("uid", entry.uid)
             putIfPresent("display_index", entry.displayIndex)

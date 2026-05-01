@@ -11,7 +11,6 @@ import me.rerere.rikkahub.data.model.Lorebook
 import me.rerere.rikkahub.data.model.LorebookGlobalSettings
 import me.rerere.rikkahub.data.model.LorebookTriggerContext
 import me.rerere.rikkahub.data.model.PromptInjection
-import me.rerere.rikkahub.data.model.WorldInfoCharacterStrategy
 import me.rerere.rikkahub.data.model.effectiveUserName
 import me.rerere.rikkahub.data.model.extractContextForMatching
 import me.rerere.rikkahub.data.model.matchesTriggerKeywords
@@ -36,7 +35,6 @@ internal fun collectTriggeredLorebookEntries(
     val nonSystemMessages = historyMessages.filter { it.role != MessageRole.SYSTEM }
     val userName = settings?.effectiveUserName().orEmpty().ifBlank { "User" }
     val assistantName = assistant.stCharacterData?.name?.ifBlank { assistant.name } ?: assistant.name.ifBlank { "Assistant" }
-    val sharedBudget = resolveSharedLorebookBudget(assistant, globalSettings)
     return selectTriggeredLorebookEntries(
         entries = applicableLorebooks.flatMap { scopedLorebook ->
             scopedLorebook.lorebook.collectTriggeredEntries(
@@ -48,7 +46,6 @@ internal fun collectTriggeredLorebookEntries(
                 globalSettings = globalSettings,
                 userName = userName,
                 assistantName = assistantName,
-                budget = scopedLorebook.lorebook.explicitBudgetOrNull(),
             ).map { entry ->
                 ActivatedLorebookEntry(
                     entry = entry,
@@ -56,8 +53,6 @@ internal fun collectTriggeredLorebookEntries(
                 )
             }
         },
-        budget = sharedBudget,
-        strategy = globalSettings.characterStrategy,
     )
 }
 
@@ -70,7 +65,6 @@ private fun Lorebook.collectTriggeredEntries(
     globalSettings: LorebookGlobalSettings,
     userName: String,
     assistantName: String,
-    budget: Int?,
 ): List<PromptInjection.RegexInjection> {
     if (entries.isEmpty()) return emptyList()
 
@@ -101,14 +95,9 @@ private fun Lorebook.collectTriggeredEntries(
         LorebookCandidate(
             entry = entry,
             isSticky = false,
-            score = 0,
         )
     }
-    val activatedEntries = selectBudgetedCandidates(
-        candidates = candidates,
-        budget = budget,
-        activatedEntries = emptyList(),
-    )
+    val activatedEntries = selectTriggeredCandidates(candidates)
 
     return activatedEntries.map { entry ->
         entry.copy(

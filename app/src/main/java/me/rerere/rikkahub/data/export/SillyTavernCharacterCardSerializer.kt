@@ -116,8 +116,6 @@ private fun buildCharacterBook(
     return buildJsonObject {
         put("name", mergedName)
         put("description", mergedDescription)
-        put("recursive_scanning", lorebooks.any { it.recursiveScanning })
-        lorebooks.mapNotNull { it.tokenBudget }.maxOrNull()?.let { put("token_budget", it) }
         putJsonObject("extensions") {}
         putJsonArray("entries") {
             lorebooks.forEach { lorebook ->

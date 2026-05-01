@@ -582,7 +582,6 @@ class SillyTavernPromptTransformerTest {
     fun `st lorebook should use single pass scanning`() {
         val lorebook = Lorebook(
             id = Uuid.random(),
-            recursiveScanning = true,
             entries = listOf(
                 PromptInjection.RegexInjection(
                     id = Uuid.random(),

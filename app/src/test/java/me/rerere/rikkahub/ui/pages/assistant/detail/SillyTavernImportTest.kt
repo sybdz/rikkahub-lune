@@ -503,8 +503,6 @@ class SillyTavernImportTest {
         val entry = lorebook.entries.single()
         assertEquals(true, entry.useRegex)
         assertEquals(9, entry.scanDepth)
-        assertEquals(true, lorebook.recursiveScanning)
-        assertEquals(256, lorebook.tokenBudget)
     }
 
     @Test
@@ -813,14 +811,9 @@ class SillyTavernImportTest {
 
         val entry = payload.lorebooks.single().entries.single()
         assertNull(entry.probability)
-        assertEquals("facts", entry.stExtension().group)
-        assertEquals(true, entry.stExtension().groupOverride)
-        assertEquals(250, entry.stExtension().groupWeight)
-        assertEquals(true, entry.stExtension().useGroupScoring)
         assertEquals("2", entry.stExtension().delayUntilRecursion)
         assertEquals(2, entry.stExtension().recursionDelayLevel())
         assertEquals(listOf("continue"), entry.stExtension().triggers)
-        assertEquals(true, entry.stExtension().ignoreBudget)
         assertEquals("memory", entry.stExtension().outletName)
         assertEquals("[\"continue\"]", entry.stMetadata["triggers"])
         assertEquals("false", entry.stMetadata["useProbability"])

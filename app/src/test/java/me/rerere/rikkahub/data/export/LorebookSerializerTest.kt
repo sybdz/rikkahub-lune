@@ -8,7 +8,7 @@ import org.junit.Test
 
 class LorebookSerializerTest {
     @Test
-    fun `standalone sillytavern lorebook import should preserve regex and extended metadata`() {
+    fun `standalone sillytavern lorebook import should preserve supported regex metadata`() {
         val lorebook = LorebookSerializer.tryImportSillyTavern(
             json = """
                 {
@@ -45,16 +45,9 @@ class LorebookSerializerTest {
         assertNotNull(lorebook)
         val parsed = lorebook!!
         val entry = parsed.entries.single()
-        assertEquals(true, parsed.recursiveScanning)
-        assertEquals(128, parsed.tokenBudget)
         assertEquals(true, entry.useRegex)
         assertNull(entry.probability)
-        assertEquals("facts", entry.stExtension().group)
-        assertEquals(true, entry.stExtension().groupOverride)
-        assertEquals(75, entry.stExtension().groupWeight)
-        assertEquals(true, entry.stExtension().useGroupScoring)
         assertEquals(listOf("continue"), entry.stExtension().triggers)
-        assertEquals(true, entry.stExtension().ignoreBudget)
         assertEquals("memory", entry.stExtension().outletName)
         assertEquals("false", entry.stMetadata["useProbability"])
         assertEquals("[\"continue\"]", entry.stMetadata["triggers"])

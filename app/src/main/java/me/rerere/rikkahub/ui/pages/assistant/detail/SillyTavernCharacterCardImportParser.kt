@@ -91,8 +91,6 @@ private fun parseCharacterData(
 
 private fun parseCharacterBook(book: JsonObject, cardName: String): Lorebook {
     val bookScanDepth = book["scan_depth"]?.jsonPrimitiveOrNull?.intOrNull
-    val tokenBudget = book["token_budget"]?.jsonPrimitiveOrNull?.intOrNull
-    val recursiveScanning = book["recursive_scanning"]?.jsonPrimitiveOrNull?.booleanOrNull ?: false
     val entries = book["entries"]?.jsonArrayOrNull().orEmpty().mapIndexed { index, element ->
         parseCharacterBookEntry(
             entry = element.jsonObject,
@@ -105,8 +103,6 @@ private fun parseCharacterBook(book: JsonObject, cardName: String): Lorebook {
         name = book["name"]?.jsonPrimitiveOrNull?.contentOrNull?.ifBlank { null } ?: "$cardName Lorebook",
         description = book["description"]?.jsonPrimitiveOrNull?.contentOrNull.orEmpty(),
         enabled = true,
-        recursiveScanning = recursiveScanning,
-        tokenBudget = tokenBudget,
         entries = entries,
     )
 }
@@ -199,10 +195,6 @@ private fun buildCharacterBookLorebookMetadata(
     entryIndex: Int,
 ): Map<String, String> {
     return StLorebookEntryExtension(
-        group = extensions.stringValue("group"),
-        groupOverride = extensions.booleanValue("group_override"),
-        groupWeight = extensions.intValue("group_weight"),
-        useGroupScoring = extensions.booleanValue("use_group_scoring"),
         sticky = extensions.intValue("sticky"),
         cooldown = extensions.intValue("cooldown"),
         delay = extensions.intValue("delay"),
@@ -210,11 +202,8 @@ private fun buildCharacterBookLorebookMetadata(
         triggers = extensions.stringListValue("triggers"),
         outletName = extensions.stringValue("outlet_name"),
         useProbability = useProbability,
-        ignoreBudget = extensions.booleanValue("ignore_budget"),
         excludeRecursion = extensions.booleanValue("exclude_recursion"),
         preventRecursion = extensions.booleanValue("prevent_recursion"),
-        vectorized = extensions.booleanValue("vectorized"),
-        automationId = extensions.stringValue("automation_id"),
         extra = buildMap {
             extensions?.forEach { (key, value) ->
                 if (key in HANDLED_CHARACTER_BOOK_EXTENSION_KEYS) return@forEach

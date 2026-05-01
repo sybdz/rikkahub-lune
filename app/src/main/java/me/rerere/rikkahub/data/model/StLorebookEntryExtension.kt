@@ -6,10 +6,6 @@ import kotlinx.serialization.json.buildJsonArray
 
 @Serializable
 data class StLorebookEntryExtension(
-    val group: String = "",
-    val groupOverride: Boolean = false,
-    val groupWeight: Int? = null,
-    val useGroupScoring: Boolean = false,
     val sticky: Int? = null,
     val cooldown: Int? = null,
     val delay: Int? = null,
@@ -17,20 +13,13 @@ data class StLorebookEntryExtension(
     val triggers: List<String> = emptyList(),
     val outletName: String = "",
     val useProbability: Boolean? = null,
-    val ignoreBudget: Boolean = false,
     val excludeRecursion: Boolean = false,
     val preventRecursion: Boolean = false,
-    val vectorized: Boolean = false,
-    val automationId: String = "",
     val extra: Map<String, String> = emptyMap(),
 ) {
     fun toMetadataMap(): Map<String, String> {
         return buildMap {
             putAll(extra)
-            if (group.isNotBlank()) put(KEY_GROUP, group)
-            if (groupOverride) put(KEY_GROUP_OVERRIDE, "true")
-            groupWeight?.let { put(KEY_GROUP_WEIGHT, it.toString()) }
-            if (useGroupScoring) put(KEY_USE_GROUP_SCORING, "true")
             sticky?.let { put(KEY_STICKY, it.toString()) }
             cooldown?.let { put(KEY_COOLDOWN, it.toString()) }
             delay?.let { put(KEY_DELAY, it.toString()) }
@@ -45,18 +34,9 @@ data class StLorebookEntryExtension(
             }
             if (outletName.isNotBlank()) put(KEY_OUTLET_NAME, outletName)
             useProbability?.let { put(KEY_USE_PROBABILITY, it.toString()) }
-            if (ignoreBudget) put(KEY_IGNORE_BUDGET, "true")
             if (excludeRecursion) put(KEY_EXCLUDE_RECURSION, "true")
             if (preventRecursion) put(KEY_PREVENT_RECURSION, "true")
-            if (vectorized) put(KEY_VECTORIZED, "true")
-            if (automationId.isNotBlank()) put(KEY_AUTOMATION_ID, automationId)
         }
-    }
-
-    fun groupNames(): List<String> {
-        return group
-            .split(',')
-            .mapNotNull { value -> value.trim().takeIf { it.isNotBlank() } }
     }
 
     fun recursionDelayLevel(): Int? {
@@ -92,10 +72,6 @@ data class StLorebookEntryExtension(
 
         fun fromMetadata(metadata: Map<String, String>): StLorebookEntryExtension {
             return StLorebookEntryExtension(
-                group = metadata[KEY_GROUP].orEmpty(),
-                groupOverride = metadata.booleanValue(KEY_GROUP_OVERRIDE) == true,
-                groupWeight = metadata.intValue(KEY_GROUP_WEIGHT),
-                useGroupScoring = metadata.booleanValue(KEY_USE_GROUP_SCORING) == true,
                 sticky = metadata.intValue(KEY_STICKY),
                 cooldown = metadata.intValue(KEY_COOLDOWN),
                 delay = metadata.intValue(KEY_DELAY),
@@ -103,11 +79,8 @@ data class StLorebookEntryExtension(
                 triggers = metadata.listValue(KEY_TRIGGERS),
                 outletName = metadata[KEY_OUTLET_NAME].orEmpty(),
                 useProbability = metadata.booleanValue(KEY_USE_PROBABILITY),
-                ignoreBudget = metadata.booleanValue(KEY_IGNORE_BUDGET) == true,
                 excludeRecursion = metadata.booleanValue(KEY_EXCLUDE_RECURSION) == true,
                 preventRecursion = metadata.booleanValue(KEY_PREVENT_RECURSION) == true,
-                vectorized = metadata.booleanValue(KEY_VECTORIZED) == true,
-                automationId = metadata[KEY_AUTOMATION_ID].orEmpty(),
                 extra = metadata.filterKeys { it !in KNOWN_KEYS },
             )
         }

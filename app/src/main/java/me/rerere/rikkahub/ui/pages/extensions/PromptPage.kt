@@ -94,7 +94,6 @@ import me.rerere.rikkahub.data.model.InjectionPosition
 import me.rerere.rikkahub.data.model.Lorebook
 import me.rerere.rikkahub.data.model.LorebookGlobalSettings
 import me.rerere.rikkahub.data.model.PromptInjection
-import me.rerere.rikkahub.data.model.WorldInfoCharacterStrategy
 import me.rerere.rikkahub.data.model.normalizeForModeInjection
 import me.rerere.rikkahub.data.model.normalizedForSystemPromptSupplement
 import me.rerere.rikkahub.ui.components.nav.BackButton
@@ -848,7 +847,7 @@ private fun LorebookOverviewCard(
             }
             LorebookGuideRow(
                 title = "全局设置",
-                body = "控制默认扫描深度、预算和匹配策略，决定整个 lorebook 系统在聊天时如何搜索可触发条目。"
+                body = "控制默认扫描深度和匹配方式，决定整个 lorebook 系统在聊天时如何搜索可触发条目。"
             )
             LorebookGuideRow(
                 title = "书本管理",
@@ -911,28 +910,6 @@ private fun LorebookGlobalSettingsCard(
                 value = settings.scanDepth,
                 onValueChange = { onEdit(settings.copy(scanDepth = it)) }
             )
-            LorebookGlobalNumberField(
-                label = stringResource(R.string.prompt_page_lorebook_global_budget_percent),
-                value = settings.budgetPercent,
-                onValueChange = { onEdit(settings.copy(budgetPercent = it.coerceIn(0, 100))) }
-            )
-            LorebookGlobalNumberField(
-                label = stringResource(R.string.prompt_page_lorebook_global_budget_cap),
-                value = settings.budgetCap,
-                onValueChange = { onEdit(settings.copy(budgetCap = it)) }
-            )
-
-            Text(
-                text = stringResource(R.string.prompt_page_lorebook_global_character_strategy),
-                style = MaterialTheme.typography.titleSmall
-            )
-            Select(
-                options = WorldInfoCharacterStrategy.entries,
-                selectedOption = settings.characterStrategy,
-                onOptionSelected = { onEdit(settings.copy(characterStrategy = it)) },
-                optionToString = { getWorldInfoCharacterStrategyLabel(it) },
-                modifier = Modifier.fillMaxWidth()
-            )
 
             FormItem(
                 label = { Text(stringResource(R.string.prompt_page_lorebook_global_include_names)) },
@@ -992,13 +969,6 @@ private fun LorebookGlobalNumberField(
         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
         singleLine = true,
     )
-}
-
-@Composable
-private fun getWorldInfoCharacterStrategyLabel(strategy: WorldInfoCharacterStrategy): String = when (strategy) {
-    WorldInfoCharacterStrategy.EVENLY -> stringResource(R.string.prompt_page_lorebook_global_character_strategy_evenly)
-    WorldInfoCharacterStrategy.CHARACTER_FIRST -> stringResource(R.string.prompt_page_lorebook_global_character_strategy_character_first)
-    WorldInfoCharacterStrategy.GLOBAL_FIRST -> stringResource(R.string.prompt_page_lorebook_global_character_strategy_global_first)
 }
 
 @Composable
@@ -1108,11 +1078,6 @@ private fun LorebookCard(
                         if (isGlobalBinding) {
                             Tag(type = TagType.SUCCESS) {
                                 Text("全局生效")
-                            }
-                        }
-                        book.tokenBudget?.let { budget ->
-                            Tag(type = TagType.INFO) {
-                                Text(stringResource(R.string.prompt_page_lorebook_budget_badge, budget))
                             }
                         }
                     }
@@ -1344,23 +1309,6 @@ private fun LorebookEditSheet(
                             onCheckedChange = { onEdit(book.copy(enabled = it)) }
                         )
                     }
-                )
-
-                OutlinedTextField(
-                    value = book.tokenBudget?.toString().orEmpty(),
-                    onValueChange = { value ->
-                        val normalized = value.trim()
-                        if (normalized.isEmpty()) {
-                            onEdit(book.copy(tokenBudget = null))
-                        } else {
-                            normalized.toIntOrNull()?.let { budget ->
-                                onEdit(book.copy(tokenBudget = budget))
-                            }
-                        }
-                    },
-                    label = { Text(stringResource(R.string.prompt_page_lorebook_book_token_budget)) },
-                    modifier = Modifier.fillMaxWidth(),
-                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                 )
 
                 // 条目列表
