@@ -1,6 +1,7 @@
 package me.rerere.rikkahub.ui.components.richtext
 
 import android.content.Intent
+import android.os.SystemClock
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.tween
@@ -107,6 +108,8 @@ private val parser by lazy {
 
 private val INLINE_LATEX_REGEX = Regex("\\\\\\((.+?)\\\\\\)")
 private val BLOCK_LATEX_REGEX = Regex("\\\\\\[(.+?)\\\\\\]", RegexOption.DOT_MATCHES_ALL)
+private const val STREAMING_FADE_DURATION_MS = 140
+private const val STREAMING_FADE_MIN_INTERVAL_MS = 90L
 private val PROTECTED_MARKDOWN_NODE_TYPES = setOf(
     MarkdownElementTypes.CODE_BLOCK,
     MarkdownElementTypes.CODE_FENCE,
@@ -1156,6 +1159,7 @@ private fun rememberStreamingAnnotatedString(
     val tailAlpha = remember { Animatable(1f) }
     val previousText = remember { mutableStateOf(if (streaming) "" else annotatedString.text) }
     val tailStart = remember { mutableStateOf(annotatedString.length) }
+    val lastAppendTime = remember { mutableStateOf(0L) }
 
     LaunchedEffect(annotatedString.text, streaming) {
         val currentText = annotatedString.text
@@ -1168,13 +1172,20 @@ private fun rememberStreamingAnnotatedString(
         }
 
         if (currentText.length > oldText.length && currentText.startsWith(oldText)) {
+            val now = SystemClock.uptimeMillis()
+            val fastAppend = now - lastAppendTime.value < STREAMING_FADE_MIN_INTERVAL_MS
+            lastAppendTime.value = now
             tailStart.value = oldText.length
             previousText.value = currentText
-            tailAlpha.snapTo(0.35f)
-            tailAlpha.animateTo(
-                targetValue = 1f,
-                animationSpec = tween(durationMillis = 160, easing = FastOutSlowInEasing),
-            )
+            if (fastAppend) {
+                tailAlpha.snapTo(1f)
+            } else {
+                tailAlpha.snapTo(0.55f)
+                tailAlpha.animateTo(
+                    targetValue = 1f,
+                    animationSpec = tween(durationMillis = STREAMING_FADE_DURATION_MS, easing = FastOutSlowInEasing),
+                )
+            }
         } else {
             previousText.value = currentText
             tailStart.value = currentText.length
