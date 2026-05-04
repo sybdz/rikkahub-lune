@@ -119,7 +119,6 @@ import me.rerere.rikkahub.ui.components.ui.RabbitLoadingIndicator
 import me.rerere.rikkahub.ui.components.ui.Tooltip
 import me.rerere.rikkahub.ui.components.ui.luneGlassBorderColor
 import me.rerere.rikkahub.ui.components.ui.luneGlassContainerColor
-import me.rerere.rikkahub.ui.theme.luneStreamingItemPlacementSpring
 import me.rerere.rikkahub.ui.theme.preferredContentColor
 import me.rerere.rikkahub.utils.plus
 import kotlin.math.roundToInt
@@ -402,8 +401,7 @@ private fun ChatListNormal(
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(top = topPadding)
-                        .animateItem(placementSpec = luneStreamingItemPlacementSpring()),
+                        .padding(top = topPadding),
                     contentAlignment = Alignment.Center,
                 ) {
                     ListSelectableItem(

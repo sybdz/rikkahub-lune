@@ -22,11 +22,6 @@ fun luneSpatialSpring(): FiniteAnimationSpec<IntOffset> = spring(
     stiffness = Spring.StiffnessMediumLow,
 )
 
-fun luneStreamingItemPlacementSpring(): FiniteAnimationSpec<IntOffset> = spring(
-    dampingRatio = Spring.DampingRatioNoBouncy,
-    stiffness = Spring.StiffnessMedium,
-)
-
 fun luneSizeSpring(): FiniteAnimationSpec<IntSize> = spring(
     dampingRatio = 0.92f,
     stiffness = Spring.StiffnessMedium,
