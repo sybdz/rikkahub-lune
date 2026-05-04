@@ -33,6 +33,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyListItemInfo
 import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
@@ -58,6 +59,7 @@ import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
@@ -117,6 +119,7 @@ import me.rerere.rikkahub.ui.components.ui.RabbitLoadingIndicator
 import me.rerere.rikkahub.ui.components.ui.Tooltip
 import me.rerere.rikkahub.ui.components.ui.luneGlassBorderColor
 import me.rerere.rikkahub.ui.components.ui.luneGlassContainerColor
+import me.rerere.rikkahub.ui.theme.luneStreamingItemPlacementSpring
 import me.rerere.rikkahub.ui.theme.preferredContentColor
 import me.rerere.rikkahub.utils.plus
 import kotlin.math.roundToInt
@@ -125,33 +128,6 @@ import kotlin.uuid.Uuid
 private const val TAG = "ChatList"
 private const val LoadingIndicatorKey = "LoadingIndicator"
 private const val ScrollBottomKey = "ScrollBottomKey"
-
-private data class AutoScrollLayoutInfo(
-    val totalItemsCount: Int,
-    val canScrollForward: Boolean,
-    val isScrollInProgress: Boolean,
-    val bottomItemVisible: Boolean,
-    val bottomOverflowPx: Int,
-)
-
-private fun LazyListState.autoScrollLayoutInfo(bottomInsetPx: Int): AutoScrollLayoutInfo {
-    val currentLayoutInfo = layoutInfo
-    val bottomItem = currentLayoutInfo.visibleItemsInfo.lastOrNull {
-        it.index == currentLayoutInfo.totalItemsCount - 1
-    }
-    val viewportBottom = currentLayoutInfo.viewportEndOffset - bottomInsetPx
-    val bottomOverflowPx = bottomItem?.let { item ->
-        item.offset + item.size - viewportBottom
-    } ?: 0
-
-    return AutoScrollLayoutInfo(
-        totalItemsCount = currentLayoutInfo.totalItemsCount,
-        canScrollForward = canScrollForward,
-        isScrollInProgress = isScrollInProgress,
-        bottomItemVisible = bottomItem != null,
-        bottomOverflowPx = bottomOverflowPx,
-    )
-}
 
 private fun Modifier.clearChatInputFocusOnTap(
     onDismiss: () -> Unit,
@@ -281,6 +257,8 @@ private fun ChatListNormal(
     showSuggestions: State<Boolean>,
 ) {
     val scope = rememberCoroutineScope()
+    val loadingState by rememberUpdatedState(loading)
+    val conversationUpdated by rememberUpdatedState(conversation)
     var isRecentScroll by remember { mutableStateOf(false) }
     val density = LocalDensity.current
     val focusManager = LocalFocusManager.current
@@ -301,9 +279,6 @@ private fun ChatListNormal(
             }
         }
     }
-    var stickToBottom by remember { mutableStateOf(true) }
-    var autoScrollInProgress by remember { mutableStateOf(false) }
-    var lastAutoScrollItemCount by remember { mutableStateOf(0) }
     DisposableEffect(
         activity,
         state,
@@ -333,6 +308,16 @@ private fun ChatListNormal(
         }
     }
 
+    fun List<LazyListItemInfo>.isAtBottom(): Boolean {
+        val lastItem = lastOrNull() ?: return false
+        if (lastItem.key == LoadingIndicatorKey || lastItem.key == ScrollBottomKey) {
+            return true
+        }
+        val lastMessageId = conversation.messageNodes.lastOrNull()?.id ?: return false
+        return lastItem.key == lastMessageId &&
+            lastItem.offset + lastItem.size <= state.layoutInfo.viewportEndOffset + lastItem.size * 0.15 + 32
+    }
+
     // 聊天选择
     val selectedItems = remember { mutableStateListOf<Uuid>() }
     var selecting by remember { mutableStateOf(false) }
@@ -359,50 +344,11 @@ private fun ChatListNormal(
         // 自动滚动到底部
         if (settings.displaySetting.enableAutoScroll) {
             LaunchedEffect(state) {
-                snapshotFlow { state.isScrollInProgress to state.canScrollForward }
-                    .collect { (isScrollInProgress, canScrollForward) ->
-                        if (autoScrollInProgress) {
-                            return@collect
-                        }
-                        if (isScrollInProgress) {
-                            stickToBottom = !canScrollForward
-                        } else if (!canScrollForward) {
-                            stickToBottom = true
-                        }
+                snapshotFlow { state.layoutInfo.visibleItemsInfo }.collect { visibleItemsInfo ->
+                    if (!state.isScrollInProgress && loadingState && visibleItemsInfo.isAtBottom()) {
+                        state.requestScrollToItem(conversationUpdated.messageNodes.lastIndex + 10)
                     }
-            }
-
-            LaunchedEffect(state, density, innerPadding, loading, stickToBottom) {
-                if (!loading || !stickToBottom) {
-                    return@LaunchedEffect
                 }
-
-                val bottomInsetPx = with(density) {
-                    innerPadding.calculateBottomPadding().toPx().roundToInt()
-                }
-                snapshotFlow { state.autoScrollLayoutInfo(bottomInsetPx) }
-                    .collect { layoutInfo ->
-                        if (!stickToBottom || layoutInfo.totalItemsCount <= 0 || layoutInfo.isScrollInProgress) {
-                            return@collect
-                        }
-
-                        if (!layoutInfo.bottomItemVisible && layoutInfo.canScrollForward) {
-                            if (lastAutoScrollItemCount != layoutInfo.totalItemsCount) {
-                                lastAutoScrollItemCount = layoutInfo.totalItemsCount
-                                state.requestScrollToItem(layoutInfo.totalItemsCount - 1)
-                            }
-                            return@collect
-                        }
-
-                        if (layoutInfo.bottomOverflowPx > 0) {
-                            autoScrollInProgress = true
-                            try {
-                                state.scrollBy(layoutInfo.bottomOverflowPx.toFloat())
-                            } finally {
-                                autoScrollInProgress = false
-                            }
-                        }
-                    }
             }
         }
 
@@ -457,7 +403,7 @@ private fun ChatListNormal(
                     modifier = Modifier
                         .fillMaxWidth()
                         .padding(top = topPadding)
-                        .animateItem(),
+                        .animateItem(placementSpec = luneStreamingItemPlacementSpring()),
                     contentAlignment = Alignment.Center,
                 ) {
                     ListSelectableItem(

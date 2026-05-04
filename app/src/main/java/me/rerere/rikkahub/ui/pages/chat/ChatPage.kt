@@ -429,9 +429,8 @@ private fun ChatPageContent(
                 forceTermuxCommandMode = setting.termuxCommandModeEnabled
             )
             scope.launch {
-                val bottomIndex = chatListState.layoutInfo.totalItemsCount - 1
-                if (bottomIndex >= 0) {
-                    chatListState.requestScrollToItem(bottomIndex)
+                if (conversation.messageNodes.isNotEmpty()) {
+                    chatListState.requestScrollToItem(conversation.messageNodes.lastIndex + 10)
                 }
             }
         }

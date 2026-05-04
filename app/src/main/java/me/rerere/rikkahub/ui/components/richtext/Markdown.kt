@@ -78,6 +78,7 @@ import me.rerere.rikkahub.ui.components.table.DataTable
 import me.rerere.rikkahub.ui.context.LocalSettings
 import me.rerere.rikkahub.ui.theme.JetbrainsMono
 import me.rerere.rikkahub.ui.theme.LocalThemeTokenOverrides
+import me.rerere.rikkahub.ui.theme.luneStreamingTextSizeSpring
 import me.rerere.rikkahub.ui.theme.ThemeTokenTextScaleGroup
 import me.rerere.rikkahub.ui.theme.applyThemeTokenTextScale
 import me.rerere.rikkahub.utils.toDp
@@ -392,7 +393,7 @@ fun MarkdownBlock(
             val contentModifier = if (animateContent) {
                 modifier
                     .padding(start = 4.dp)
-                    .animateContentSize()
+                    .animateContentSize(animationSpec = luneStreamingTextSizeSpring())
             } else {
                 modifier.padding(start = 4.dp)
             }
