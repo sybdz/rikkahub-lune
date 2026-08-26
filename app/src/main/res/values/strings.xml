@@ -1231,6 +1231,10 @@
   <string name="workspace_terminal_not_installed">Please install Rootfs first</string>
   <string name="workspace_terminal_loading">Loading workspace…</string>
   <string name="workspace_terminal_exited">Terminal exited</string>
+  <string name="workspace_terminal_tab">Terminal %1$d</string>
+  <string name="workspace_terminal_new_tab">New terminal tab</string>
+  <string name="workspace_terminal_close_tab">Close terminal %1$d</string>
+  <string name="workspace_terminal_no_tabs">No open terminal tabs</string>
   <string name="extensions_page_workspace">Workspace</string>
   <string name="extensions_page_workspace_desc">Manage local working directories accessible by Agent</string>
   <string name="workspace_select">Select Workspace</string>
@@ -1318,5 +1322,10 @@
   <string name="setting_update_reminder_pause_days">%1$d days</string>
   <string name="setting_update_reminder_resume_now">Resume now</string>
   <string name="backup_page_import_overwrite_confirm">Importing a backup will overwrite app data. Continue?</string>
+  <string name="setting_provider_page_test_non_streaming">Non-streaming</string>
+  <string name="setting_provider_page_test_streaming">Streaming</string>
+  <string name="setting_provider_page_test_tool_call">Tool Call</string>
+  <string name="setting_provider_page_test_tool_called">Called: %1$s  Args: %2$s</string>
+  <string name="setting_provider_page_test_tool_not_called">Tool not called, response: %s</string>
 </resources>
 

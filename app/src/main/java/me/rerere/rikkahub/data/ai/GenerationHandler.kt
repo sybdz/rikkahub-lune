@@ -80,6 +80,7 @@ class GenerationHandler(
         maxSteps: Int = 256,
         processingStatus: MutableStateFlow<String?> = MutableStateFlow(null),
         conversationSystemPrompt: String? = null,
+        conversationId: Uuid? = null,
         conversationModeInjectionIds: Set<Uuid> = emptySet(),
         conversationLorebookIds: Set<Uuid> = emptySet(),
         workspaceCwd: String? = null,
@@ -158,6 +159,7 @@ class GenerationHandler(
                     stream = assistant.streamOutput,
                     processingStatus = processingStatus,
                     conversationSystemPrompt = conversationSystemPrompt,
+                    conversationId = conversationId,
                     conversationModeInjectionIds = conversationModeInjectionIds,
                     conversationLorebookIds = conversationLorebookIds,
                     workspaceCwd = workspaceCwd,
@@ -376,6 +378,7 @@ class GenerationHandler(
         assistant: Assistant,
         model: Model,
         tools: List<Tool>,
+        conversationId: Uuid? = null,
     ): TextGenerationParams {
         return TextGenerationParams(
             model = model,
@@ -386,6 +389,7 @@ class GenerationHandler(
             reasoningLevel = assistant.reasoningLevel,
             customHeaders = assistant.customHeaders + model.customHeaders,
             customBody = assistant.customBodies + model.customBodies,
+            sessionId = conversationId?.toString(),
         )
     }
 
@@ -403,6 +407,7 @@ class GenerationHandler(
         stream: Boolean,
         processingStatus: MutableStateFlow<String?> = MutableStateFlow(null),
         conversationSystemPrompt: String? = null,
+        conversationId: Uuid? = null,
         conversationModeInjectionIds: Set<Uuid> = emptySet(),
         conversationLorebookIds: Set<Uuid> = emptySet(),
         workspaceCwd: String? = null,
@@ -423,7 +428,7 @@ class GenerationHandler(
         )
 
         var messages: List<UIMessage> = messages
-        val params = buildTextGenerationParams(assistant, model, tools)
+        val params = buildTextGenerationParams(assistant, model, tools, conversationId)
         if (stream) {
             val streamChunkHandler = StreamChunkHandler(model)
             providerImpl.streamText(
