@@ -117,8 +117,8 @@ fun HighlightCodeBlock(
     val canInlinePreview = completeCodeBlock && remember(code, normalizedLanguage) {
         isPreviewableFrontendCodeBlock(code = code, language = normalizedLanguage)
     }
-    var previewMode by remember(canInlinePreview) {
-        mutableStateOf(canInlinePreview)
+    var previewMode by remember(canInlinePreview, code, normalizedLanguage) {
+        mutableStateOf(false)
     }
 
     var isExpanded by remember(settings.displaySetting.codeBlockAutoCollapse) {
