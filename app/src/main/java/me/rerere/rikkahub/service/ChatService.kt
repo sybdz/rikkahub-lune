@@ -1,7 +1,6 @@
 package me.rerere.rikkahub.service
 
 import android.app.Application
-import android.content.Context
 import android.util.Log
 import androidx.core.net.toUri
 import kotlinx.coroutines.CancellationException
@@ -29,11 +28,8 @@ import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.buildJsonObject
-import kotlinx.serialization.json.jsonObject
 import me.rerere.ai.core.MessageRole
 import me.rerere.ai.core.ReasoningLevel
-import me.rerere.ai.core.Tool
-import me.rerere.ai.provider.BuiltInTools
 import me.rerere.ai.provider.Model
 import me.rerere.ai.provider.ModelAbility
 import me.rerere.ai.provider.ProviderManager
@@ -49,16 +45,13 @@ import me.rerere.common.android.Logging
 import me.rerere.rikkahub.AppScope
 import me.rerere.rikkahub.R
 import me.rerere.rikkahub.data.ai.GenerationChunk
-import me.rerere.rikkahub.data.ai.GenerationHandler
+import me.rerere.rikkahub.data.ai.GenerationLoop
 import me.rerere.rikkahub.data.ai.hasBlockingToolsForContinuation
 import me.rerere.rikkahub.data.ai.TranslationHandler
 import me.rerere.rikkahub.data.ai.mcp.McpManager
-import me.rerere.rikkahub.data.ai.tools.createConversationTools
-import me.rerere.rikkahub.data.ai.tools.local.LocalTools
-import me.rerere.rikkahub.data.ai.tools.createSearchTools
-import me.rerere.rikkahub.data.ai.tools.createSkillTools
-import me.rerere.rikkahub.data.ai.tools.createWorkspaceTools
-import me.rerere.rikkahub.data.files.SkillManager
+import me.rerere.rikkahub.data.ai.tools.ChatToolFactory
+import me.rerere.rikkahub.data.ai.tools.InvalidMcpServerNamesException
+import me.rerere.rikkahub.data.ai.tools.shouldUseExternalWebSearch
 import me.rerere.rikkahub.data.ai.transformers.Base64ImageToLocalFileTransformer
 import me.rerere.rikkahub.data.ai.transformers.DocumentAsPromptTransformer
 import me.rerere.rikkahub.data.ai.transformers.OcrTransformer
@@ -92,7 +85,6 @@ import me.rerere.rikkahub.data.repository.WorkspaceRepository
 import me.rerere.rikkahub.web.BadRequestException
 import me.rerere.rikkahub.web.NotFoundException
 import me.rerere.rikkahub.utils.applyPlaceholders
-import me.rerere.workspace.WorkspaceShellStatus
 import java.time.Instant
 import java.util.Locale
 import java.util.concurrent.ConcurrentHashMap
@@ -109,10 +101,6 @@ internal fun backgroundTextGenerationParams(
     customHeaders = model.customHeaders,
     customBody = model.customBodies,
 )
-
-internal fun shouldUseExternalWebSearch(assistant: Assistant, model: Model): Boolean {
-    return assistant.enableWebSearch && BuiltInTools.Search !in model.tools
-}
 
 internal fun createForkConversation(
     source: Conversation,
@@ -166,14 +154,13 @@ class ChatService(
     private val settingsStore: SettingsStore,
     private val conversationRepo: ConversationRepository,
     private val memoryRepository: MemoryRepository,
-    private val generationHandler: GenerationHandler,
+    private val generationLoop: GenerationLoop,
     private val translationHandler: TranslationHandler,
     private val templateTransformer: TemplateTransformer,
     private val providerManager: ProviderManager,
-    private val localTools: LocalTools,
+    private val chatToolFactory: ChatToolFactory,
     val mcpManager: McpManager,
     private val filesManager: FilesManager,
-    private val skillManager: SkillManager,
     private val workspaceRepository: WorkspaceRepository,
     private val folderRepository: FolderRepository,
 ) {
@@ -311,8 +298,17 @@ class ChatService(
             ?: error("No model configured for this conversation")
         val provider = model.findProvider(settings.providers)
             ?: error("No provider configured for model ${model.modelId}")
-        val tools = buildRuntimeConversationTools(settings, assistant, conversation)
-        val preparedMessages = generationHandler.previewPreparedMessages(
+        val tools = try {
+            chatToolFactory.createTools(
+                settings = settings,
+                assistant = assistant,
+                model = model,
+                workspaceCwd = conversation.workspaceCwd,
+            )
+        } catch (error: InvalidMcpServerNamesException) {
+            error(context.getString(R.string.error_mcp_invalid_server_name, error.names.joinToString(", ")))
+        }
+        val preparedMessages = generationLoop.previewPreparedMessages(
             settings = settings,
             model = model,
             messages = conversation.currentMessages,
@@ -352,7 +348,7 @@ class ChatService(
             payloadPreview = providerManager.previewTextRequest(
                 setting = provider,
                 messages = preparedMessages,
-                params = generationHandler.buildTextGenerationParams(
+                params = generationLoop.buildTextGenerationParams(
                     assistant = assistant,
                     model = model,
                     tools = tools,
@@ -361,50 +357,6 @@ class ChatService(
                 stream = assistant.streamOutput,
             ),
         )
-    }
-
-    private suspend fun buildRuntimeConversationTools(
-        settings: me.rerere.rikkahub.data.datastore.Settings,
-        assistant: Assistant,
-        conversation: Conversation,
-    ): List<Tool> = buildList {
-        if (assistant.enableWebSearch) {
-            addAll(createSearchTools(settings))
-        }
-        addAll(localTools.getTools(assistant.localTools))
-        if (assistant.enableRecentChatsReference) {
-            addAll(createConversationTools(conversationRepo, assistant.id))
-        }
-        addAll(createWorkspaceToolsIfReady(assistant.workspaceId?.toString(), conversation.workspaceCwd))
-        if (assistant.enabledSkills.isNotEmpty()) {
-            addAll(
-                createSkillTools(
-                    enabledSkills = assistant.enabledSkills,
-                    allSkills = skillManager.listSkills(),
-                )
-            )
-        }
-        val allMcpTools = mcpManager.getAllAvailableTools()
-        val invalidNames = allMcpTools
-            .map { it.second }
-            .distinct()
-            .filter { name ->
-                name.isEmpty() || !name.all { it in 'a'..'z' || it in 'A'..'Z' || it in '0'..'9' }
-            }
-        if (invalidNames.isNotEmpty()) {
-            error(context.getString(R.string.error_mcp_invalid_server_name, invalidNames.joinToString(", ")))
-        }
-        allMcpTools.forEach { (serverId, serverName, tool) ->
-            add(
-                Tool(
-                    name = "mcp__${serverName}__${tool.name}",
-                    description = tool.description ?: "",
-                    parameters = { tool.inputSchema },
-                    needsApproval = { tool.needsApproval },
-                    execute = { mcpManager.callTool(serverId, tool.name, it.jsonObject) },
-                )
-            )
-        }
     }
 
     private fun buildRuntimeContextJson(
@@ -777,9 +729,29 @@ class ChatService(
             checkInvalidMessages(conversationId)
             val conversation = getConversationFlow(conversationId).value
 
+            val tools = try {
+                chatToolFactory.createTools(
+                    settings = settings,
+                    assistant = assistant,
+                    model = model,
+                    workspaceCwd = conversation.workspaceCwd,
+                )
+            } catch (error: InvalidMcpServerNamesException) {
+                addError(
+                    error = IllegalStateException(
+                        context.getString(
+                            R.string.error_mcp_invalid_server_name,
+                            error.names.joinToString(", "),
+                        )
+                    ),
+                    conversationId = conversationId,
+                )
+                return
+            }
+
             // start generating
             val session = getOrCreateSession(conversationId)
-            generationHandler.generateText(
+            generationLoop.generateText(
                 settings = settings,
                 model = model,
                 processingStatus = session.processingStatus,
@@ -808,54 +780,7 @@ class ChatService(
                     add(RegexPromptTransformer)
                 },
                 outputTransformers = outputTransformers,
-                tools = buildList {
-                    if (useExternalWebSearch) {
-                        addAll(createSearchTools(settings))
-                    }
-                    addAll(localTools.getTools(assistant.localTools))
-                    if (assistant.enableRecentChatsReference) {
-                        addAll(createConversationTools(conversationRepo, assistant.id))
-                    }
-                    addAll(createWorkspaceToolsIfReady(assistant.workspaceId?.toString(), conversation.workspaceCwd))
-                    if (assistant.enabledSkills.isNotEmpty()) {
-                        addAll(
-                            createSkillTools(
-                                enabledSkills = assistant.enabledSkills,
-                                allSkills = skillManager.listSkills(),
-                            )
-                        )
-                    }
-                    mcpManager.getAllAvailableTools().also { allTools ->
-                        val invalidNames = allTools
-                            .map { it.second }
-                            .distinct()
-                            .filter { name -> name.isEmpty() || !name.all { it in 'a'..'z' || it in 'A'..'Z' || it in '0'..'9' } }
-                        if (invalidNames.isNotEmpty()) {
-                            addError(
-                                error = IllegalStateException(
-                                    context.getString(
-                                        R.string.error_mcp_invalid_server_name,
-                                        invalidNames.joinToString(", ")
-                                    )
-                                ),
-                                conversationId = conversationId,
-                            )
-                            return
-                        }
-                    }.forEach { (serverId, serverName, tool) ->
-                        add(
-                            Tool(
-                                name = "mcp__${serverName}__${tool.name}",
-                                description = tool.description ?: "",
-                                parameters = { tool.inputSchema },
-                                needsApproval = { tool.needsApproval },
-                                execute = {
-                                    mcpManager.callTool(serverId, tool.name, it.jsonObject)
-                                },
-                            )
-                        )
-                    }
-                },
+                tools = tools,
             ).onCompletion {
                 // 可能被取消了，或者意外结束，兜底更新
                 val updatedConversation = getConversationFlow(conversationId).value.copy(
@@ -911,19 +836,6 @@ class ChatService(
                 generateSuggestion(conversationId, finalConversation)
             }
         }
-    }
-
-    private suspend fun createWorkspaceToolsIfReady(workspaceId: String?, cwd: String? = null): List<Tool> {
-        if (workspaceId.isNullOrBlank()) return emptyList()
-        val workspace = workspaceRepository.getById(workspaceId) ?: return emptyList()
-        if (workspace.shellStatus != WorkspaceShellStatus.READY.name) {
-            Log.d(
-                TAG,
-                "createWorkspaceToolsIfReady: skip workspace tools, workspace=$workspaceId, status=${workspace.shellStatus}"
-            )
-            return emptyList()
-        }
-        return createWorkspaceTools(workspaceId, workspaceRepository, cwd)
     }
 
     // ---- 检查无效消息 ----
