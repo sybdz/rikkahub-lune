@@ -46,6 +46,29 @@ class TextRequestPreviewTest {
     }
 
     @Test
+    fun `openai responses preview uses configured endpoint in both modes`() {
+        val provider = OpenAIProvider(OkHttpClient())
+        val setting = ProviderSetting.OpenAI(
+            baseUrl = "https://example.com/v1",
+            responsesPath = "/custom/responses",
+            useResponseApi = true,
+        )
+
+        listOf(false, true).forEach { stream ->
+            val preview = provider.previewTextRequest(
+                providerSetting = setting,
+                messages = messages,
+                params = params,
+                stream = stream,
+            )
+
+            assertEquals("OpenAI Responses API", preview.apiName)
+            assertEquals("https://example.com/v1/custom/responses", preview.url)
+            assertEquals(stream.toString(), preview.body["stream"]?.jsonPrimitive?.content)
+        }
+    }
+
+    @Test
     fun `google stream preview includes sse URL and configured key`() {
         val preview = GoogleProvider(OkHttpClient()).previewTextRequest(
             providerSetting = ProviderSetting.Google(apiKey = "google-secret"),
