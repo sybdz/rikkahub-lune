@@ -256,7 +256,7 @@
   <string name="chat_message_tool_search_web">Search web: %1$s</string>
   <string name="chat_message_tool_submit">Submit</string>
   <string name="chat_page_cancel">Cancel</string>
-    <string name="chat_page_check_fast_model_settings">Check fast model settings</string>
+  <string name="chat_page_check_fast_model_settings">Check fast model settings</string>
   <string name="chat_page_clear_all_errors">Clear all</string>
   <string name="chat_page_compress_additional_prompt">Additional Instructions (Optional)</string>
   <string name="chat_page_compress_additional_prompt_hint">Specify what to preserve or focus on</string>
@@ -791,7 +791,7 @@
   <string name="setting_model_page_chat_model_desc">Global default chat model</string>
   <string name="setting_model_page_compress_model">Compress Model</string>
   <string name="setting_model_page_fast_model">Fast Model</string>
-    <string name="setting_model_page_fast_model_desc">Model used for titles, chat suggestions, and other fast or background tasks</string>
+  <string name="setting_model_page_fast_model_desc">Model used for titles, chat suggestions, and other fast or background tasks</string>
   <string name="setting_model_page_compress_model_desc">Model for compressing conversation history</string>
   <string name="setting_model_page_compress_prompt_vars">Variables: {content}, {target_tokens}, {additional_context}</string>
   <string name="setting_model_page_ocr_model">OCR Model</string>
@@ -1317,10 +1317,10 @@
   <string name="tool_ui_python_default">Python</string>
   <string name="assistant_page_regex_prompt_only">Prompt Only (affects prompts sent to the LLM, not display)</string>
   <string name="assistant_page_context_message_limit">Context Message Limit</string>
-  <string name="assistant_page_context_message_limit_desc">Caps how many recent messages are sent to the model. When the limit is exceeded, the context is trimmed down to about half in one step instead of dropping one message per turn, so the request prefix stays stable and prompt caching keeps working for many turns.</string>
+  <string name="assistant_page_context_message_limit_desc">Limits the number of recent messages sent to the model</string>
   <string name="assistant_page_context_message_limit_count">Context message limit: %d</string>
   <string name="assistant_page_context_message_limit_unlimited">Unlimited context messages</string>
-  <string name="assistant_page_context_message_limit_hint">Enter 0 for unlimited, or a value of at least %d</string>
+  <string name="assistant_page_context_message_limit_hint">Enter 0 for unlimited; otherwise, larger values are better. Setting it to 0 or at least 20 is recommended.</string>
   <string name="assistant_page_context_message_limit_too_small">The context message limit cannot be less than %1$d. It has been reset to %1$d.</string>
   <string name="assistant_page_context_message_limit_warning">Limiting context invalidates the prompt cache each time the context is trimmed. A larger limit trims less often; unlimited never trims and keeps the cache fully intact.</string>
   <string name="setting_update_reminder_enabled">Update reminders are enabled</string>
@@ -1378,4 +1378,16 @@
   <string name="chat_page_queue_edit_title">Edit queued message</string>
   <string name="chat_page_queue_paused_count">Queue paused · %1$d</string>
   <string name="chat_page_queue_pending_count">Queued · %1$d</string>
+  <string name="assistant_page_time_reminder_interval">Time reminder interval</string>
+  <string name="assistant_page_time_reminder_interval_label">Interval (minutes)</string>
+  <string name="assistant_page_time_reminder_interval_hint">Enter a positive whole number. A reminder is inserted when the message gap exceeds this interval.</string>
+  <string name="assistant_page_time_reminder_interval_desc">Insert a reminder when the message gap exceeds this interval. Always remind before the first user message.</string>
+  <string name="assistant_page_time_reminder_interval_value">%1$d min</string>
+  <string name="imggen_page_delete_images_title">Delete images</string>
+  <string name="imggen_page_delete_images_message">Delete the selected images (%1$d)? This cannot be undone.</string>
+  <string name="imggen_page_delete_images_success">Images deleted: %1$d</string>
+  <string name="imggen_page_delete_images_failed">Deleted: %1$d. Failed: %2$d. Please try again.</string>
+  <string name="imggen_page_deleting">Deleting…</string>
+  <string name="imggen_page_selected_count">Selected: %1$d</string>
+  <string name="imggen_page_select_image">Select image</string>
 </resources>

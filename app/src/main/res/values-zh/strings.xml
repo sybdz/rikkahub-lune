@@ -256,7 +256,7 @@
   <string name="chat_message_tool_search_web">搜索网页: %1$s</string>
   <string name="chat_message_tool_submit">提交</string>
   <string name="chat_page_cancel">取消</string>
-    <string name="chat_page_check_fast_model_settings">检查快速模型设置</string>
+  <string name="chat_page_check_fast_model_settings">检查快速模型设置</string>
   <string name="chat_page_clear_all_errors">清除全部</string>
   <string name="chat_page_compress_additional_prompt">附加说明（可选）</string>
   <string name="chat_page_compress_additional_prompt_hint">指定要保留或关注的内容</string>
@@ -1155,7 +1155,7 @@ mDNS 地址：使用 .local 主机名，同一网络中的其他设备可通过�
   <string name="setting_display_page_bubble_opacity_title">气泡不透明度</string>
   <string name="setting_provider_page_include_history_reasoning">回传历史思考过程</string>
   <string name="setting_model_page_fast_model">快速模型</string>
-    <string name="setting_model_page_fast_model_desc">用于生成标题、聊天建议以及执行其他快速或后台任务</string>
+  <string name="setting_model_page_fast_model_desc">用于生成标题、聊天建议以及执行其他快速或后台任务</string>
   <string name="setting_model_page_enable_suggestion">启用聊天建议</string>
   <string name="assistant_page_gradient_background">渐变背景</string>
   <string name="assistant_page_gradient_background_desc">在聊天页面使用动态渐变背景</string>
@@ -1298,10 +1298,10 @@ mDNS 地址：使用 .local 主机名，同一网络中的其他设备可通过�
   <string name="tool_ui_python_default">Python</string>
   <string name="assistant_page_regex_prompt_only">仅提示词（仅影响发送给 LLM 的提示词，不影响显示）</string>
   <string name="assistant_page_context_message_limit">上下文消息限制</string>
-  <string name="assistant_page_context_message_limit_desc">限制发送给模型的最近消息数量。超出限制时，上下文会一次性缩减至约一半，而非每轮丢弃一条消息，从而保持请求前缀稳定，并使提示词缓存在多轮对话中持续生效。</string>
+  <string name="assistant_page_context_message_limit_desc">限制发送给模型的最近消息数量</string>
   <string name="assistant_page_context_message_limit_count">上下文消息限制: %d</string>
   <string name="assistant_page_context_message_limit_unlimited">无限上下文消息</string>
-  <string name="assistant_page_context_message_limit_hint">输入 0 表示不限制，其他值不能小于 %d</string>
+  <string name="assistant_page_context_message_limit_hint">输入 0 表示不限制，否则越大越好，推荐设置为 0 或者 20 以上</string>
   <string name="assistant_page_context_message_limit_too_small">上下文消息限制不能小于 %1$d，已自动重置为 %1$d。</string>
   <string name="assistant_page_context_message_limit_warning">限制上下文会在每次上下文被修剪时使提示词缓存失效。更大的限制修剪频率更低；无限制则从不修剪，并保持缓存完全完好。</string>
   <string name="setting_update_reminder_enabled">更新提醒已启用</string>
@@ -1329,11 +1329,11 @@ mDNS 地址：使用 .local 主机名，同一网络中的其他设备可通过�
   <string name="workspace_terminal_close_confirm_title">关闭终端 %1$d？</string>
   <string name="workspace_terminal_close_confirm_message">关闭此标签页将终止其中仍在运行的任何进程。</string>
   <string name="workspace_terminal_close">关闭</string>
-    <string name="chat_generation_network_retrying">%1$s，正在重试（%2$d/%3$d）…</string>
-    <string name="chat_generation_network_unknown_host">无法解析服务器地址</string>
-    <string name="chat_generation_network_timeout">连接超时</string>
-    <string name="chat_generation_network_unreachable">无法连接到服务器</string>
-    <string name="chat_generation_network_disconnected">网络连接已断开</string>
+  <string name="chat_generation_network_retrying">%1$s，正在重试（%2$d/%3$d）…</string>
+  <string name="chat_generation_network_unknown_host">无法解析服务器地址</string>
+  <string name="chat_generation_network_timeout">连接超时</string>
+  <string name="chat_generation_network_unreachable">无法连接到服务器</string>
+  <string name="chat_generation_network_disconnected">网络连接已断开</string>
   <string name="setting_tts_page_default_playback_speed">默认播放速度</string>
   <string name="setting_tts_page_default_playback_speed_description">本地应用于每个TTS提供商，不会更改其合成设置。</string>
   <string name="search_page_scope_current_assistant">当前助手</string>
@@ -1374,4 +1374,16 @@ mDNS 地址：使用 .local 主机名，同一网络中的其他设备可通过�
   <string name="chat_page_voice_end">结束</string>
   <string name="chat_page_voice_configure_asr">请先在语音设置中配置 ASR</string>
   <string name="chat_page_voice_unsupported_asr">当前 ASR 不支持服务端断句，请使用 OpenAI Realtime、DashScope 或火山</string>
+  <string name="assistant_page_time_reminder_interval">时间提醒间隔</string>
+  <string name="assistant_page_time_reminder_interval_label">间隔（分钟）</string>
+  <string name="assistant_page_time_reminder_interval_hint">请输入正整数。当消息间隔超过该时间间隔时，将插入一条提醒。</string>
+  <string name="assistant_page_time_reminder_interval_desc">当消息间隔超过此设定值时插入提醒。始终在第一条用户消息之前提醒。</string>
+  <string name="assistant_page_time_reminder_interval_value">%1$d 分钟</string>
+  <string name="imggen_page_delete_images_title">删除图片</string>
+  <string name="imggen_page_delete_images_message">删除选定的图片（%1$d）？此操作无法撤销。</string>
+  <string name="imggen_page_delete_images_success">已删除 %1$d 张图片</string>
+  <string name="imggen_page_delete_images_failed">已删除：%1$d。失败：%2$d。请重试。</string>
+  <string name="imggen_page_deleting">删除中…</string>
+  <string name="imggen_page_selected_count">已选择：%1$d</string>
+  <string name="imggen_page_select_image">选择图片</string>
 </resources>
