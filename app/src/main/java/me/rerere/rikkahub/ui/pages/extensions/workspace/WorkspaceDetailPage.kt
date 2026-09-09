@@ -83,6 +83,7 @@ import me.rerere.rikkahub.data.db.entity.WorkspaceEntity
 import androidx.compose.ui.res.stringResource
 import me.rerere.rikkahub.R
 import me.rerere.rikkahub.ui.components.nav.BackButton
+import me.rerere.rikkahub.ui.components.ui.CardGroup
 import me.rerere.rikkahub.ui.components.ui.ImagePreviewDialog
 import me.rerere.rikkahub.ui.components.ui.RikkaConfirmDialog
 import me.rerere.rikkahub.ui.context.LocalNavController
@@ -105,6 +106,7 @@ fun WorkspaceDetailPage(id: String) {
     val state by vm.state.collectAsStateWithLifecycle()
     val installProgress by vm.installProgress.collectAsStateWithLifecycle()
     val installError by vm.installError.collectAsStateWithLifecycle()
+    val settingsError by vm.settingsError.collectAsStateWithLifecycle()
     val pagerState = rememberPagerState { 2 }
     val scope = rememberCoroutineScope()
     var deleteTarget by remember { mutableStateOf<WorkspaceFileEntry?>(null) }
@@ -204,6 +206,7 @@ fun WorkspaceDetailPage(id: String) {
                     onSystemPromptEnabledChange = vm::setSystemPromptEnabled,
                     onSystemPromptSave = vm::saveSystemPrompt,
                     onSystemPromptReset = vm::resetSystemPrompt,
+                    onShellCompatibilityModeChange = vm::setShellCompatibilityMode,
                 )
 
                 1 -> WorkspaceFilesPage(
@@ -215,6 +218,11 @@ fun WorkspaceDetailPage(id: String) {
                     onOpen = { entry ->
                         when {
                             entry.isDirectory -> vm.open(entry)
+
+                            entry.name.substringAfterLast('.').equals("svg", ignoreCase = true) ->
+                                navController.navigate(
+                                    Screen.WorkspaceFileEditor(id, state.area.name, entry.path)
+                                )
 
                             else -> when (entry.detectFileType()) {
                                 WorkspaceFileType.TEXT -> navController.navigate(
@@ -298,6 +306,19 @@ fun WorkspaceDetailPage(id: String) {
         )
     }
 
+    settingsError?.let { message ->
+        AlertDialog(
+            onDismissRequest = vm::dismissSettingsError,
+            title = { Text(stringResource(R.string.workspace_detail_settings_save_failed)) },
+            text = { Text(message.ifBlank { stringResource(R.string.workspace_detail_settings_save_failed) }) },
+            confirmButton = {
+                TextButton(onClick = vm::dismissSettingsError) {
+                    Text(stringResource(R.string.common_confirm))
+                }
+            },
+        )
+    }
+
     previewImageUri?.let { uri ->
         ImagePreviewDialog(
             images = listOf(uri),
@@ -332,6 +353,7 @@ private fun WorkspaceBasicPage(
     onSystemPromptEnabledChange: (Boolean) -> Unit,
     onSystemPromptSave: (String) -> Unit,
     onSystemPromptReset: () -> Unit,
+    onShellCompatibilityModeChange: (Boolean) -> Unit,
 ) {
     val shellStatus = workspace?.shellStatus
     val installing = installProgress != null || shellStatus == WorkspaceShellStatus.INSTALLING.name
@@ -348,63 +370,76 @@ private fun WorkspaceBasicPage(
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
         item {
-            Card(
-                modifier = Modifier.fillMaxWidth(),
-                colors = CustomColors.cardColorsOnSurfaceContainer,
+            CardGroup(
+                title = { Text(stringResource(R.string.workspace_detail_workspace_info)) },
             ) {
-                Column(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(16.dp),
-                    verticalArrangement = Arrangement.spacedBy(16.dp),
-                ) {
-                    Text(
-                        text = stringResource(R.string.workspace_detail_workspace_info),
-                        style = MaterialTheme.typography.titleMedium,
-                    )
-                    WorkspaceInfoRow(stringResource(R.string.workspace_detail_name), workspace?.name ?: stringResource(R.string.workspace_detail_loading))
-                    WorkspaceInfoRow(stringResource(R.string.workspace_detail_shell_status), workspace?.shellStatus?.toShellStatusLabel() ?: "-")
-                }
+                item(
+                    headlineContent = { Text(stringResource(R.string.workspace_detail_name)) },
+                    supportingContent = {
+                        Text(workspace?.name ?: stringResource(R.string.workspace_detail_loading))
+                    },
+                )
+                item(
+                    headlineContent = { Text(stringResource(R.string.workspace_detail_shell_status)) },
+                    supportingContent = { Text(shellStatus?.toShellStatusLabel() ?: "-") },
+                )
             }
         }
 
         item {
-            Card(
-                modifier = Modifier.fillMaxWidth(),
-                colors = CustomColors.cardColorsOnSurfaceContainer,
+            CardGroup(
+                title = { Text(stringResource(R.string.workspace_detail_enable_shell)) },
             ) {
-                Column(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(16.dp),
-                    verticalArrangement = Arrangement.spacedBy(16.dp),
-                ) {
-                    Text(
-                        text = stringResource(R.string.workspace_detail_enable_shell),
-                        style = MaterialTheme.typography.titleMedium,
-                    )
-                    Text(
-                        text = stringResource(R.string.workspace_detail_enable_shell_desc),
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
+                item(
+                    headlineContent = {
+                        Text(stringResource(R.string.workspace_detail_enable_shell_desc))
+                    },
+                    supportingContent = {
+                        Column(
+                            modifier = Modifier.padding(top = 8.dp),
+                            verticalArrangement = Arrangement.spacedBy(12.dp),
+                        ) {
+                            Button(
+                                onClick = onInstallRootfs,
+                                enabled = workspace != null && !installing,
+                                modifier = Modifier.fillMaxWidth(),
+                            ) {
+                                Icon(HugeIcons.Bash, contentDescription = null)
+                                Text(
+                                    text = installButtonText,
+                                    modifier = Modifier.padding(start = 8.dp),
+                                )
+                            }
+                            installProgress?.let { RootfsProgress(it) }
+                        }
+                    },
+                )
+            }
+        }
 
-                    Button(
-                        onClick = onInstallRootfs,
-                        enabled = workspace != null && !installing,
-                        modifier = Modifier.fillMaxWidth(),
-                    ) {
-                        Icon(HugeIcons.Bash, contentDescription = null)
+        item {
+            CardGroup(
+                title = {
+                    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                        Text(stringResource(R.string.workspace_detail_compatibility_mode))
                         Text(
-                            text = installButtonText,
-                            modifier = Modifier.padding(start = 8.dp),
+                            text = stringResource(R.string.workspace_detail_compatibility_mode_desc),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
                     }
-
-                    installProgress?.let { progress ->
-                        RootfsProgress(progress)
-                    }
-                }
+                },
+            ) {
+                item(
+                    headlineContent = { Text(stringResource(R.string.workspace_detail_compatibility_mode)) },
+                    trailingContent = {
+                        Switch(
+                            checked = workspace?.shellCompatibilityMode ?: false,
+                            onCheckedChange = onShellCompatibilityModeChange,
+                            enabled = workspace != null,
+                        )
+                    },
+                )
             }
         }
 
@@ -481,41 +516,41 @@ private fun WorkspaceToolApprovalCard(
     onToolApprovalChange: (String, Boolean) -> Unit,
 ) {
     val overrides = workspace?.toolApprovalOverrides().orEmpty()
+    val tools = workspaceToolItems()
 
-    Card(
-        modifier = Modifier.fillMaxWidth(),
-        colors = CustomColors.cardColorsOnSurfaceContainer,
-    ) {
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(16.dp),
-        ) {
+    CardGroup(
+        title = {
             Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                Text(
-                    text = stringResource(R.string.workspace_detail_tool_approval),
-                    style = MaterialTheme.typography.titleMedium,
-                )
+                Text(stringResource(R.string.workspace_detail_tool_approval))
                 Text(
                     text = stringResource(R.string.workspace_detail_tool_approval_desc),
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
-
-            workspaceToolItems().forEach { (toolName, label) ->
-                WorkspaceToolSwitchRow(
-                    toolName = toolName,
-                    label = label,
-                    checked = resolveWorkspaceToolApproval(toolName, overrides),
-                    enabled = workspace != null && resolveWorkspaceToolEnabled(
-                        toolName,
-                        workspace.toolEnabledOverrides(),
-                    ),
-                    onCheckedChange = { onToolApprovalChange(toolName, it) },
-                )
-            }
+        },
+    ) {
+        tools.forEach { (toolName, label) ->
+            item(
+                headlineContent = { Text(label) },
+                supportingContent = {
+                    Text(
+                        text = toolName,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                },
+                trailingContent = {
+                    Switch(
+                        checked = resolveWorkspaceToolApproval(toolName, overrides),
+                        onCheckedChange = { onToolApprovalChange(toolName, it) },
+                        enabled = workspace != null && resolveWorkspaceToolEnabled(
+                            toolName,
+                            workspace.toolEnabledOverrides(),
+                        ),
+                    )
+                },
+            )
         }
     }
 }
@@ -648,34 +683,6 @@ private fun workspaceToolItems() = listOf(
     "workspace_shell" to stringResource(R.string.workspace_detail_tool_shell),
     "workspace_python" to stringResource(R.string.workspace_detail_tool_python),
 )
-
-@Composable
-private fun WorkspaceInfoRow(
-    label: String,
-    value: String,
-) {
-    Row(
-        modifier = Modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.spacedBy(12.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Text(
-            text = label,
-            modifier = Modifier.weight(0.35f),
-            style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
-        )
-        Text(
-            text = value,
-            modifier = Modifier.weight(0.65f),
-            style = MaterialTheme.typography.bodyMedium,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
-        )
-    }
-}
 
 @Composable
 private fun RootfsProgress(progress: RootfsInstallProgress) {

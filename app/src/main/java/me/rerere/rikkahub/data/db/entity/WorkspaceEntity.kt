@@ -40,6 +40,8 @@ data class WorkspaceEntity(
     val systemPromptEnabled: Boolean = true,
     @ColumnInfo("system_prompt", defaultValue = "''")
     val systemPrompt: String = "",
+    @ColumnInfo("shell_compatibility_mode", defaultValue = "0")
+    val shellCompatibilityMode: Boolean = false,
 ) {
     fun toolApprovalOverrides(): Map<String, Boolean> = runCatching {
         JsonInstant.decodeFromString<Map<String, Boolean>>(toolApprovals)
