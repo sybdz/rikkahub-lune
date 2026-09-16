@@ -368,7 +368,7 @@ class GenerationLoop(
             reasoningLevel = assistant.reasoningLevel,
             customHeaders = assistant.customHeaders + model.customHeaders,
             customBody = assistant.customBodies + model.customBodies,
-            sessionId = conversationId?.toString(),
+            sessionId = (conversationId ?: Uuid.random()).toString(),
         )
     }
 
