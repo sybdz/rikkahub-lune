@@ -474,6 +474,7 @@ class GoogleProvider(private val client: OkHttpClient, context: Context? = null)
                                                     "exclusiveMinimum",
                                                     "format",
                                                     "additionalProperties",
+                                                    "propertyNames",
                                                     "enum",
                                                 )
                                             )
