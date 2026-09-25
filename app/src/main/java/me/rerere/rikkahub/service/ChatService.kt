@@ -652,7 +652,7 @@ class ChatService(
     fun continueAssistantMessage(
         conversationId: Uuid,
         message: UIMessage,
-    ) = synchronized(getOrCreateSession(conversationId)) {
+    ) = synchronized(sessionManager.getOrCreate(conversationId)) {
         if (message.role != MessageRole.ASSISTANT) return@synchronized
         if (message.hasBlockingToolsForContinuation()) {
             addError(
@@ -662,7 +662,7 @@ class ChatService(
             return@synchronized
         }
 
-        val session = getOrCreateSession(conversationId)
+        val session = sessionManager.getOrCreate(conversationId)
         val previousJob = session.getJob()
 
         val job = launchGenerationJob(conversationId) {
