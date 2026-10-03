@@ -26,8 +26,8 @@ android {
         applicationId = "me.rerere.rikkahub.ywxk"
         minSdk = 26
         targetSdk = 37
-        versionCode = 189
-        versionName = "2.5.4"
+        versionCode = 191
+        versionName = "2.5.6"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 
@@ -302,7 +302,7 @@ dependencies {
     implementation(project(":highlight"))
     implementation(project(":search"))
     implementation(project(":speech"))
-    implementation(project(":videogen"))
+    implementation(project(":mediagen"))
     implementation(project(":common"))
     implementation(project(":material3"))
     implementation(project(":workspace"))

@@ -10,6 +10,7 @@ import me.rerere.hugeicons.stroke.Tools
 import me.rerere.hugeicons.stroke.Share01
 import me.rerere.hugeicons.stroke.Delete01
 import me.rerere.hugeicons.stroke.Cancel01
+import me.rerere.hugeicons.stroke.Settings03
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -40,7 +41,6 @@ import androidx.compose.material3.Badge
 import androidx.compose.material3.BadgedBox
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
-import androidx.compose.material3.FilledIconButton
 import androidx.compose.material3.FloatingToolbarDefaults.ScreenOffset
 import androidx.compose.material3.FloatingToolbarDefaults.floatingToolbarVerticalNestedScroll
 import androidx.compose.material3.HorizontalFloatingToolbar
@@ -60,7 +60,6 @@ import androidx.compose.material3.SegmentedButton
 import androidx.compose.material3.SegmentedButtonDefaults
 import androidx.compose.material3.SingleChoiceSegmentedButtonRow
 import androidx.compose.material3.Surface
-import androidx.compose.material3.SwipeToDismissBox
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Tab
 import androidx.compose.material3.Text
@@ -68,7 +67,6 @@ import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.SheetValue
 import androidx.compose.material3.rememberBottomSheetState
-import androidx.compose.material3.rememberSwipeToDismissBoxState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -80,7 +78,6 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.input.KeyboardType
@@ -109,10 +106,14 @@ import me.rerere.rikkahub.ui.components.ai.ModelTypeTag
 import me.rerere.rikkahub.ui.components.ai.ProviderBalanceText
 import me.rerere.rikkahub.ui.components.nav.BackButton
 import me.rerere.rikkahub.ui.components.ui.AutoAIIcon
+import me.rerere.rikkahub.ui.components.ui.ItemAction
+import me.rerere.rikkahub.ui.components.ui.ItemActionMenu
+import me.rerere.rikkahub.ui.components.ui.RikkaConfirmDialog
 import me.rerere.rikkahub.ui.components.ui.ShareSheet
 import me.rerere.rikkahub.ui.components.ui.SiliconFlowPowerByIcon
 import me.rerere.rikkahub.ui.components.ui.Tag
 import me.rerere.rikkahub.ui.components.ui.TagType
+import me.rerere.rikkahub.ui.components.ui.longPressReorder
 import me.rerere.rikkahub.ui.components.ui.rememberShareSheetState
 import me.rerere.rikkahub.ui.context.LocalNavController
 import me.rerere.rikkahub.ui.context.LocalToaster
@@ -139,7 +140,7 @@ fun SettingProviderDetailPage(id: Uuid, vm: SettingVM = koinViewModel()) {
     val settings by vm.settings.collectAsStateWithLifecycle()
     val navController = LocalNavController.current
     val provider = settings.providers.find { it.id == id } ?: return
-    val pager = rememberPagerState { 2 }
+    val pager = rememberPagerState { 3 }
     val scope = rememberCoroutineScope()
     val toaster = LocalToaster.current
     val context = LocalContext.current
@@ -218,6 +219,16 @@ fun SettingProviderDetailPage(id: Uuid, vm: SettingVM = koinViewModel()) {
                         }
                     }
                 )
+                NavigationBarItem(
+                    selected = pager.currentPage == 2,
+                    label = { Text(stringResource(id = R.string.setting_provider_page_advanced_settings)) },
+                    icon = { Icon(HugeIcons.Settings03, null) },
+                    onClick = {
+                        scope.launch {
+                            pager.animateScrollToPage(2)
+                        }
+                    }
+                )
             }
         }
     ) {
@@ -246,6 +257,13 @@ fun SettingProviderDetailPage(id: Uuid, vm: SettingVM = koinViewModel()) {
 
                 1 -> {
                     SettingProviderModelPage(
+                        provider = provider,
+                        onEdit = onEdit
+                    )
+                }
+
+                2 -> {
+                    SettingProviderAdvancedPage(
                         provider = provider,
                         onEdit = onEdit
                     )
@@ -382,6 +400,28 @@ private fun SettingProviderModelPage(
 }
 
 @Composable
+private fun SettingProviderAdvancedPage(
+    provider: ProviderSetting,
+    onEdit: (ProviderSetting) -> Unit
+) {
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .imePadding()
+            .verticalScroll(rememberScrollState())
+            .padding(16.dp),
+        verticalArrangement = Arrangement.spacedBy(16.dp),
+    ) {
+        CustomHeaders(
+            headers = provider.customHeaders,
+            onUpdate = { headers ->
+                onEdit(provider.copyProvider(customHeaders = headers))
+            }
+        )
+    }
+}
+
+@Composable
 private fun ModelList(
     providerSetting: ProviderSetting,
     onUpdateProvider: (ProviderSetting) -> Unit
@@ -455,17 +495,7 @@ private fun ModelList(
                                 onUpdateProvider(providerSetting.editModel(editedModel))
                             },
                             parentProvider = providerSetting,
-                            modifier = Modifier
-                                .longPressDraggableHandle()
-                                .graphicsLayer {
-                                    if (isDragging) {
-                                        scaleX = 1.05f
-                                        scaleY = 1.05f
-                                    } else {
-                                        scaleX = 1f
-                                        scaleY = 1f
-                                    }
-                                },
+                            modifier = longPressReorder(isDragging),
                         )
                     }
                 }
@@ -1169,8 +1199,8 @@ private fun ModelCard(
     val dialogState = useEditState<Model> {
         onEdit(it.copy(displayName = it.displayName.trim()))
     }
-    val swipeToDismissBoxState = rememberSwipeToDismissBoxState()
     val scope = rememberCoroutineScope()
+    var showDeleteDialog by remember { mutableStateOf(false) }
 
 
     if (dialogState.isEditing) {
@@ -1252,99 +1282,79 @@ private fun ModelCard(
         }
     }
 
-    SwipeToDismissBox(
-        state = swipeToDismissBoxState,
-        backgroundContent = {
-            Row(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(8.dp),
-                horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.End),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                IconButton(
-                    onClick = {
-                        scope.launch {
-                            swipeToDismissBoxState.reset()
-                        }
-                    }
-                ) {
-                    Icon(HugeIcons.Cancel01, null)
-                }
-                FilledIconButton(
-                    onClick = {
-                        scope.launch {
-                            onDelete()
-                            swipeToDismissBoxState.reset()
-                        }
-                    }
-                ) {
-                    Icon(
-                        HugeIcons.Delete01,
-                        contentDescription = stringResource(R.string.chat_page_delete)
-                    )
-                }
-            }
-        },
-        enableDismissFromStartToEnd = false,
-        gesturesEnabled = true,
-        modifier = modifier
+    OutlinedCard(
+        onClick = { dialogState.open(model.copy()) },
+        modifier = modifier,
     ) {
-        OutlinedCard {
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 16.dp, vertical = 8.dp),
-                horizontalArrangement = Arrangement.spacedBy(16.dp),
-                verticalAlignment = Alignment.CenterVertically,
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 16.dp, vertical = 8.dp),
+            horizontalArrangement = Arrangement.spacedBy(16.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Surface(
+                color = MaterialTheme.colorScheme.secondaryContainer,
+                shape = MaterialTheme.shapes.small,
             ) {
-                Surface(
-                    color = MaterialTheme.colorScheme.secondaryContainer,
-                    shape = MaterialTheme.shapes.small,
-                ) {
-                    AutoAIIcon(
-                        name = model.modelId,
-                        modifier = Modifier.size(36.dp),
-                    )
-                }
-                Column(
-                    modifier = Modifier.weight(1f),
+                AutoAIIcon(
+                    name = model.modelId,
+                    modifier = Modifier.size(36.dp),
+                )
+            }
+            Column(
+                modifier = Modifier.weight(1f),
+                verticalArrangement = Arrangement.spacedBy(4.dp),
+            ) {
+                Text(
+                    text = model.displayName,
+                    style = MaterialTheme.typography.titleSmall,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis,
+                )
+                FlowRow(
+                    horizontalArrangement = Arrangement.spacedBy(4.dp),
                     verticalArrangement = Arrangement.spacedBy(4.dp),
                 ) {
-                    Text(
-                        text = model.displayName,
-                        style = MaterialTheme.typography.titleSmall,
-                        maxLines = 2,
-                        overflow = TextOverflow.Ellipsis,
-                    )
-                    FlowRow(
-                        horizontalArrangement = Arrangement.spacedBy(4.dp),
-                        verticalArrangement = Arrangement.spacedBy(4.dp),
-                    ) {
-                        if (model.providerOverwrite != null) {
-                            Tag(type = TagType.INFO) {
-                                Text(
-                                    model.providerOverwrite?.javaClass?.simpleName ?: model.providerOverwrite?.name
-                                    ?: "ProviderOverwrite"
-                                )
-                            }
+                    if (model.providerOverwrite != null) {
+                        Tag(type = TagType.INFO) {
+                            Text(
+                                model.providerOverwrite?.javaClass?.simpleName ?: model.providerOverwrite?.name
+                                ?: "ProviderOverwrite"
+                            )
                         }
-                        ModelTypeTag(model = model)
-                        ModelModalityTag(model = model)
-                        ModelAbilityTag(model = model)
                     }
-                }
-
-                // Edit button
-                IconButton(
-                    onClick = {
-                        dialogState.open(model.copy())
-                    }
-                ) {
-                    Icon(HugeIcons.Tools, "Edit")
+                    ModelTypeTag(model = model)
+                    ModelModalityTag(model = model)
+                    ModelAbilityTag(model = model)
                 }
             }
+
+            ItemActionMenu(
+                actions = listOf(
+                    ItemAction(
+                        text = stringResource(R.string.delete),
+                        icon = HugeIcons.Delete01,
+                        destructive = true,
+                        onClick = { showDeleteDialog = true },
+                    ),
+                )
+            )
         }
+    }
+
+    RikkaConfirmDialog(
+        show = showDeleteDialog,
+        title = stringResource(R.string.confirm_delete),
+        confirmText = stringResource(R.string.delete),
+        dismissText = stringResource(R.string.cancel),
+        onConfirm = {
+            showDeleteDialog = false
+            onDelete()
+        },
+        onDismiss = { showDeleteDialog = false },
+    ) {
+        Text(stringResource(R.string.common_delete_confirm_message, model.displayName))
     }
 }
 

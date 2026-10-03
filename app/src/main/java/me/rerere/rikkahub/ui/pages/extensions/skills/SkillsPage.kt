@@ -4,7 +4,6 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -12,14 +11,13 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
 import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.DropdownMenu
-import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -48,20 +46,24 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import me.rerere.rikkahub.R
 import me.rerere.hugeicons.HugeIcons
 import me.rerere.hugeicons.stroke.Add01
+import me.rerere.hugeicons.stroke.Cancel01
 import me.rerere.hugeicons.stroke.Delete01
 import me.rerere.hugeicons.stroke.Download01
 import me.rerere.hugeicons.stroke.FileImport
-import me.rerere.hugeicons.stroke.MoreVertical
 import me.rerere.hugeicons.stroke.Puzzle
+import me.rerere.hugeicons.stroke.Search01
 import me.rerere.rikkahub.data.files.SkillFrontmatterParser
 import me.rerere.rikkahub.data.files.SkillMetadata
 import me.rerere.rikkahub.Screen
 import me.rerere.rikkahub.ui.components.nav.BackButton
+import me.rerere.rikkahub.ui.components.ui.ItemAction
+import me.rerere.rikkahub.ui.components.ui.ItemActionMenu
 import me.rerere.rikkahub.ui.components.ui.RikkaConfirmDialog
 import me.rerere.rikkahub.ui.context.LocalNavController
 import me.rerere.rikkahub.ui.context.LocalToaster
@@ -81,6 +83,17 @@ fun SkillsPage() {
     var showAddDialog by rememberSaveable { mutableStateOf(false) }
     var showImportDialog by rememberSaveable { mutableStateOf(false) }
     var deleteTarget by remember { mutableStateOf<SkillMetadata?>(null) }
+    var searchQuery by rememberSaveable { mutableStateOf("") }
+    val filteredSkills = remember(skills, searchQuery) {
+        if (searchQuery.isBlank()) {
+            skills
+        } else {
+            skills.filter { skill ->
+                skill.name.contains(searchQuery, ignoreCase = true) ||
+                    skill.description.contains(searchQuery, ignoreCase = true)
+            }
+        }
+    }
     val fileImportLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.OpenDocument()
     ) { uri ->
@@ -150,7 +163,44 @@ fun SkillsPage() {
                 }
             }
 
-            items(skills, key = { it.skillDir.absolutePath }) { skill ->
+            if (skills.isNotEmpty()) {
+                item(key = "search") {
+                    OutlinedTextField(
+                        value = searchQuery,
+                        onValueChange = { searchQuery = it },
+                        modifier = Modifier.fillMaxWidth(),
+                        placeholder = { Text(stringResource(R.string.skills_page_search_placeholder)) },
+                        leadingIcon = {
+                            Icon(HugeIcons.Search01, contentDescription = null)
+                        },
+                        trailingIcon = {
+                            if (searchQuery.isNotEmpty()) {
+                                IconButton(onClick = { searchQuery = "" }) {
+                                    Icon(HugeIcons.Cancel01, contentDescription = "Clear")
+                                }
+                            }
+                        },
+                        singleLine = true,
+                        shape = CircleShape,
+                    )
+                }
+            }
+
+            if (skills.isNotEmpty() && filteredSkills.isEmpty()) {
+                item(key = "no_result") {
+                    Text(
+                        text = stringResource(R.string.skills_page_search_no_result),
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(vertical = 32.dp),
+                        textAlign = TextAlign.Center,
+                    )
+                }
+            }
+
+            items(filteredSkills, key = { it.skillDir.absolutePath }) { skill ->
                 SkillCard(
                     skill = skill,
                     onClick = { navController.navigate(Screen.SkillDetail(skill.name)) },
@@ -236,8 +286,6 @@ private fun SkillCard(
     onClick: () -> Unit,
     onDelete: () -> Unit,
 ) {
-    var menuExpanded by remember { mutableStateOf(false) }
-
     Card(
         onClick = onClick,
         modifier = Modifier.fillMaxWidth(),
@@ -246,7 +294,7 @@ private fun SkillCard(
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(start = 16.dp, top = 12.dp, bottom = 12.dp, end = 4.dp),
+                .padding(start = 16.dp, top = 12.dp, bottom = 12.dp, end = if (skill.builtin) 16.dp else 4.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Icon(
@@ -271,6 +319,13 @@ private fun SkillCard(
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     maxLines = 2,
                 )
+                if (skill.builtin) {
+                    Text(
+                        text = "Built-in",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.secondary,
+                    )
+                }
                 if (!skill.compatibility.isNullOrBlank()) {
                     Text(
                         text = skill.compatibility,
@@ -279,32 +334,18 @@ private fun SkillCard(
                     )
                 }
             }
-            Box {
-                IconButton(onClick = { menuExpanded = true }) {
-                    Icon(
-                        imageVector = HugeIcons.MoreVertical,
-                        contentDescription = stringResource(R.string.skills_page_more_actions),
+            // 内置技能只读，不提供删除
+            if (!skill.builtin) {
+                ItemActionMenu(
+                    actions = listOf(
+                        ItemAction(
+                            text = stringResource(R.string.delete),
+                            icon = HugeIcons.Delete01,
+                            destructive = true,
+                            onClick = onDelete,
+                        ),
                     )
-                }
-                DropdownMenu(
-                    expanded = menuExpanded,
-                    onDismissRequest = { menuExpanded = false },
-                ) {
-                    DropdownMenuItem(
-                        text = { Text(stringResource(R.string.delete), color = MaterialTheme.colorScheme.error) },
-                        leadingIcon = {
-                            Icon(
-                                imageVector = HugeIcons.Delete01,
-                                contentDescription = null,
-                                tint = MaterialTheme.colorScheme.error,
-                            )
-                        },
-                        onClick = {
-                            menuExpanded = false
-                            onDelete()
-                        },
-                    )
-                }
+                )
             }
         }
     }

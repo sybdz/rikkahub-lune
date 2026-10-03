@@ -19,17 +19,15 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.selection.toggleable
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.Checkbox
 import androidx.compose.material3.FilterChip
-import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LargeFlexibleTopAppBar
-import androidx.compose.material3.ListItem
-import androidx.compose.material3.ListItemDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedTextField
@@ -47,17 +45,13 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.scale
-import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.input.nestedscroll.nestedScroll
-import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.util.fastForEach
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import me.rerere.hugeicons.stroke.MoreVertical
 import me.rerere.rikkahub.R
 import me.rerere.rikkahub.Screen
 import me.rerere.rikkahub.data.datastore.DEFAULT_ASSISTANTS_IDS
@@ -66,15 +60,18 @@ import me.rerere.rikkahub.data.model.Assistant
 import me.rerere.rikkahub.data.model.AssistantMemory
 import me.rerere.rikkahub.ui.components.nav.BackButton
 import me.rerere.rikkahub.ui.components.ui.FormItem
+import me.rerere.rikkahub.ui.components.ui.ItemAction
+import me.rerere.rikkahub.ui.components.ui.ItemActionMenu
+import me.rerere.rikkahub.ui.components.ui.RikkaConfirmDialog
 import me.rerere.rikkahub.ui.components.ui.Tag
 import me.rerere.rikkahub.ui.components.ui.TagType
 import me.rerere.rikkahub.ui.components.ui.UIAvatar
+import me.rerere.rikkahub.ui.components.ui.longPressReorder
 import me.rerere.rikkahub.ui.context.LocalNavController
 import me.rerere.rikkahub.ui.hooks.EditState
 import me.rerere.rikkahub.ui.hooks.EditStateContent
 import me.rerere.rikkahub.ui.hooks.heroAnimation
 import me.rerere.rikkahub.ui.hooks.useEditState
-import me.rerere.rikkahub.ui.modifier.onClick
 import me.rerere.rikkahub.ui.pages.assistant.detail.AssistantImporter
 import me.rerere.rikkahub.ui.theme.CustomColors
 import org.koin.androidx.compose.koinViewModel
@@ -96,8 +93,11 @@ fun AssistantPage(vm: AssistantVM = koinViewModel()) {
     var searchQuery by remember { mutableStateOf("") }
     // 标签过滤状态
     var selectedTagIds by remember { mutableStateOf(emptySet<Uuid>()) }
-    // 操作菜单状态
-    var actionSheetAssistant by remember { mutableStateOf<Assistant?>(null) }
+    // 待删除的助手
+    var deleteTarget by remember { mutableStateOf<Assistant?>(null) }
+    // 待复制的助手(仅在有独立记忆时需要询问是否一并复制)
+    var cloneTarget by remember { mutableStateOf<Assistant?>(null) }
+    var cloneWithMemories by remember { mutableStateOf(false) }
 
     // 根据搜索关键词和选中的标签过滤助手
     val filteredAssistants = remember(settings.assistants, selectedTagIds, searchQuery) {
@@ -152,7 +152,6 @@ fun AssistantPage(vm: AssistantVM = koinViewModel()) {
                     vm.updateSettings(settings.copy(assistants = newAssistants))
                 }
             }
-            val haptic = LocalHapticFeedback.current
 
             // 搜索框
             OutlinedTextField(
@@ -209,27 +208,22 @@ fun AssistantPage(vm: AssistantVM = koinViewModel()) {
                             onEdit = {
                                 navController.navigate(Screen.AssistantDetail(id = assistant.id.toString()))
                             },
-                            onShowActions = {
-                                actionSheetAssistant = assistant
+                            onCopy = {
+                                // 全局记忆是共享的, 复制后的助手本来就能读到, 无需询问
+                                if (!assistant.useGlobalMemory && memories.isNotEmpty()) {
+                                    cloneWithMemories = false
+                                    cloneTarget = assistant
+                                } else {
+                                    vm.copyAssistant(assistant)
+                                }
+                            },
+                            onDelete = {
+                                deleteTarget = assistant
                             },
                             modifier = Modifier
-                                .scale(if (isDragging) 0.95f else 1f)
                                 .fillMaxWidth()
                                 .animateItem()
-                                .then(
-                                    if (!isFiltering) {
-                                        Modifier.longPressDraggableHandle(
-                                            onDragStarted = {
-                                                haptic.performHapticFeedback(HapticFeedbackType.GestureThresholdActivate)
-                                            },
-                                            onDragStopped = {
-                                                haptic.performHapticFeedback(HapticFeedbackType.GestureEnd)
-                                            }
-                                        )
-                                    } else {
-                                        Modifier
-                                    }
-                                )
+                                .then(longPressReorder(isDragging, enabled = !isFiltering))
                         )
                     }
                 }
@@ -239,20 +233,45 @@ fun AssistantPage(vm: AssistantVM = koinViewModel()) {
 
     AssistantCreationSheet(createState)
 
-    // 操作菜单 Bottom Sheet
-    actionSheetAssistant?.let { assistant ->
-        AssistantActionSheet(
-            assistant = assistant,
-            onDismiss = { actionSheetAssistant = null },
-            onCopy = {
-                vm.copyAssistant(assistant)
-                actionSheetAssistant = null
-            },
-            onDelete = {
-                vm.removeAssistant(assistant)
-                actionSheetAssistant = null
-            }
-        )
+    RikkaConfirmDialog(
+        show = deleteTarget != null,
+        title = stringResource(R.string.assistant_page_delete),
+        confirmText = stringResource(R.string.delete),
+        dismissText = stringResource(R.string.cancel),
+        onConfirm = {
+            deleteTarget?.let { vm.removeAssistant(it) }
+            deleteTarget = null
+        },
+        onDismiss = { deleteTarget = null },
+    ) {
+        Text(stringResource(R.string.assistant_page_delete_dialog_text))
+    }
+
+    RikkaConfirmDialog(
+        show = cloneTarget != null,
+        title = stringResource(R.string.assistant_page_clone),
+        confirmText = stringResource(R.string.confirm),
+        dismissText = stringResource(R.string.cancel),
+        onConfirm = {
+            cloneTarget?.let { vm.copyAssistant(it, copyMemories = cloneWithMemories) }
+            cloneTarget = null
+        },
+        onDismiss = { cloneTarget = null },
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .toggleable(
+                    value = cloneWithMemories,
+                    role = Role.Checkbox,
+                    onValueChange = { cloneWithMemories = it },
+                ),
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Checkbox(checked = cloneWithMemories, onCheckedChange = null)
+            Text(stringResource(R.string.assistant_page_clone_with_memories))
+        }
     }
 }
 
@@ -263,7 +282,6 @@ private fun AssistantTagsFilterRow(
     selectedTagIds: Set<Uuid>,
     onUpdateSelectedTagIds: (Set<Uuid>) -> Unit
 ) {
-    val haptic = LocalHapticFeedback.current
     if (settings.assistantTags.isNotEmpty()) {
         val tagsListState = rememberLazyListState()
         val tagsReorderableState = rememberReorderableLazyListState(tagsListState) { from, to ->
@@ -301,16 +319,7 @@ private fun AssistantTagsFilterRow(
                             },
                             selected = tag.id in selectedTagIds,
                             shape = RoundedCornerShape(50),
-                            modifier = Modifier
-                                .scale(if (isDragging) 0.95f else 1f)
-                                .longPressDraggableHandle(
-                                    onDragStarted = {
-                                        haptic.performHapticFeedback(HapticFeedbackType.GestureThresholdActivate)
-                                    },
-                                    onDragStopped = {
-                                        haptic.performHapticFeedback(HapticFeedbackType.GestureEnd)
-                                    },
-                                )
+                            modifier = longPressReorder(isDragging)
                         )
                     }
                 }
@@ -396,7 +405,8 @@ private fun AssistantItem(
     modifier: Modifier = Modifier,
     memories: List<AssistantMemory>,
     onEdit: () -> Unit,
-    onShowActions: () -> Unit,
+    onCopy: () -> Unit,
+    onDelete: () -> Unit,
 ) {
     Card(
         modifier = modifier.fillMaxWidth(),
@@ -468,112 +478,22 @@ private fun AssistantItem(
                 }
             }
 
-            IconButton(
-                onClick = onShowActions
-            ) {
-                Icon(
-                    imageVector = HugeIcons.MoreVertical,
-                    contentDescription = stringResource(R.string.assistant_page_actions)
+            ItemActionMenu(
+                actions = listOf(
+                    ItemAction(
+                        text = stringResource(R.string.assistant_page_clone),
+                        icon = HugeIcons.Copy01,
+                        onClick = onCopy,
+                    ),
+                    ItemAction(
+                        text = stringResource(R.string.assistant_page_delete),
+                        icon = HugeIcons.Delete01,
+                        destructive = true,
+                        enabled = assistant.id !in DEFAULT_ASSISTANTS_IDS,
+                        onClick = onDelete,
+                    ),
                 )
-            }
-        }
-    }
-}
-
-@Composable
-private fun AssistantActionSheet(
-    assistant: Assistant,
-    onDismiss: () -> Unit,
-    onCopy: () -> Unit,
-    onDelete: () -> Unit
-) {
-    var showDeleteDialog by remember { mutableStateOf(false) }
-
-    ModalBottomSheet(
-        onDismissRequest = onDismiss
-    ) {
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(bottom = 32.dp)
-        ) {
-            // 助手信息头部
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 16.dp, vertical = 8.dp),
-                horizontalArrangement = Arrangement.spacedBy(12.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                UIAvatar(
-                    name = assistant.name.ifBlank { stringResource(R.string.assistant_page_default_assistant) },
-                    value = assistant.avatar,
-                    modifier = Modifier.size(40.dp)
-                )
-                Text(
-                    text = assistant.name.ifBlank { stringResource(R.string.assistant_page_default_assistant) },
-                    style = MaterialTheme.typography.titleMedium
-                )
-            }
-
-            HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
-
-            // 克隆选项
-            ListItem(
-                headlineContent = { Text(stringResource(R.string.assistant_page_clone)) },
-                leadingContent = {
-                    Icon(
-                        imageVector = HugeIcons.Copy01,
-                        contentDescription = null,
-                        tint = MaterialTheme.colorScheme.primary
-                    )
-                },
-                modifier = Modifier.onClick { onCopy() },
-                colors = ListItemDefaults.colors(containerColor = Color.Transparent)
             )
-
-            // 删除选项（仅非默认助手显示）
-            if (assistant.id !in DEFAULT_ASSISTANTS_IDS) {
-                ListItem(
-                    headlineContent = {
-                        Text(
-                            stringResource(R.string.assistant_page_delete),
-                            color = MaterialTheme.colorScheme.error
-                        )
-                    },
-                    leadingContent = {
-                        Icon(
-                            imageVector = HugeIcons.Delete01,
-                            contentDescription = null,
-                            tint = MaterialTheme.colorScheme.error
-                        )
-                    },
-                    modifier = Modifier.onClick { showDeleteDialog = true },
-                    colors = ListItemDefaults.colors(containerColor = Color.Transparent)
-                )
-            }
         }
-    }
-
-    if (showDeleteDialog) {
-        AlertDialog(
-            onDismissRequest = { showDeleteDialog = false },
-            title = { Text(stringResource(R.string.assistant_page_delete)) },
-            text = { Text(stringResource(R.string.assistant_page_delete_dialog_text)) },
-            confirmButton = {
-                TextButton(
-                    onClick = {
-                        showDeleteDialog = false
-                        onDelete()
-                    }) {
-                    Text(stringResource(R.string.confirm))
-                }
-            },
-            dismissButton = {
-                TextButton(onClick = { showDeleteDialog = false }) {
-                    Text(stringResource(R.string.cancel))
-                }
-            },
-        )
     }
 }
