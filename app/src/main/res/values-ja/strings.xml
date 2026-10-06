@@ -1405,10 +1405,6 @@ mDNSアドレス: .localホスト名を使用し、IPを知らなくても同じ
   <string name="assistant_page_local_tools_chart_display_desc">AIに折れ線グラフ、棒グラフ、散布図を表示させる</string>
   <string name="chat_message_tool_chart_display">グラフを表示</string>
   <string name="chat_message_tool_chart_display_with_title">グラフを表示: %1$s</string>
-  <string name="chart_mode_chart">チャート</string>
-  <string name="chart_mode_table">表</string>
-  <string name="chart_series">系列</string>
-  <string name="chart_series_name">系列 %1$d</string>
   <string name="error_fast_model_not_found">高速モデルが見つかりません。設定で選択してください。</string>
   <string name="error_fast_model_provider_not_found">高速モデルのプロバイダーが見つかりません</string>
   <string name="assistant_page_clone_with_memories">記憶もコピー</string>
@@ -1573,4 +1569,7 @@ mDNSアドレス: .localホスト名を使用し、IPを知らなくても同じ
   <string name="chat_page_compress_blocked_generating">コンテキストを圧縮する前に生成を停止してください</string>
   <string name="chat_page_compress_conversation_changed">圧縮中に会話が変更されました。もう一度お試しください。</string>
   <string name="chat_page_compress_pending_tools">保留中のツール呼び出しを先に処理するか、それらを含む最近のメッセージを保持してください</string>
+  <string name="sketch">スケッチ</string>
+  <string name="sketch_draw_on_image">画像に描画</string>
+  <string name="imggen_page_deprecated_warning">この機能は非推奨であり、将来のバージョンで削除される予定です。代わりに %1$s を使用してください</string>
 </resources>

@@ -1405,10 +1405,6 @@
   <string name="assistant_page_local_tools_chart_display_desc">Разрешить ИИ отображать линейные, столбчатые и точечные диаграммы</string>
   <string name="chat_message_tool_chart_display">Показать диаграмму</string>
   <string name="chat_message_tool_chart_display_with_title">Показать диаграмму: %1$s</string>
-  <string name="chart_mode_chart">Диаграмма</string>
-  <string name="chart_mode_table">Таблица</string>
-  <string name="chart_series">Ряд</string>
-  <string name="chart_series_name">Ряд %1$d</string>
   <string name="error_fast_model_not_found">Быстрая модель не найдена. Пожалуйста, выберите её в настройках.</string>
   <string name="error_fast_model_provider_not_found">Провайдер быстрой модели не найден</string>
   <string name="assistant_page_clone_with_memories">Также копировать память</string>
@@ -1573,4 +1569,7 @@
   <string name="chat_page_compress_blocked_generating">Остановите генерацию перед сжатием контекста</string>
   <string name="chat_page_compress_conversation_changed">Диалог изменился во время сжатия. Повторите попытку.</string>
   <string name="chat_page_compress_pending_tools">Сначала обработайте ожидающие вызовы инструментов или сохраните последние сообщения, содержащие их</string>
+  <string name="sketch">Эскиз</string>
+  <string name="sketch_draw_on_image">Рисовать на изображении</string>
+  <string name="imggen_page_deprecated_warning">Эта функция устарела и будет удалена в будущей версии. Вместо неё используйте %1$s</string>
 </resources>

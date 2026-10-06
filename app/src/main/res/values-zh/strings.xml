@@ -1406,10 +1406,6 @@ mDNS 地址：使用 .local 主机名，同一网络中的其他设备可通过�
   <string name="assistant_page_local_tools_chart_display_desc">让 AI 显示折线图、柱状图和散点图</string>
   <string name="chat_message_tool_chart_display">显示图表</string>
   <string name="chat_message_tool_chart_display_with_title">显示图表：%1$s</string>
-  <string name="chart_mode_chart">图表</string>
-  <string name="chart_mode_table">表格</string>
-  <string name="chart_series">系列</string>
-  <string name="chart_series_name">系列 %1$d</string>
   <string name="error_fast_model_not_found">未找到快速模型。请在设置中选择一个。</string>
   <string name="error_fast_model_provider_not_found">未找到快速模型的提供商</string>
   <string name="assistant_page_clone_with_memories">同时复制记忆</string>
@@ -1573,4 +1569,7 @@ mDNS 地址：使用 .local 主机名，同一网络中的其他设备可通过�
   <string name="chat_page_compress_blocked_generating">请先停止生成再压缩上下文</string>
   <string name="chat_page_compress_conversation_changed">对话在压缩期间发生变化，请重试</string>
   <string name="chat_page_compress_pending_tools">请先处理待审批的工具调用，或保留包含它的最近消息后再压缩</string>
+  <string name="sketch">草图</string>
+  <string name="sketch_draw_on_image">在图片上绘制</string>
+  <string name="imggen_page_deprecated_warning">此功能已弃用，并将在未来版本中移除。请改用 %1$s</string>
 </resources>
