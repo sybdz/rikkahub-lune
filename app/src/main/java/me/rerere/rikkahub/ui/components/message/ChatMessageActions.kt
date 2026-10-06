@@ -115,15 +115,10 @@ fun ColumnScope.ChatMessageActionButtons(
         )
 
         if (message.role == MessageRole.ASSISTANT) {
-            Icon(
-                imageVector = HugeIcons.ArrowRight01,
+            ChatMessageActionButton(
+                icon = HugeIcons.ArrowRight01,
                 contentDescription = "Continue",
-                modifier = Modifier
-                    .clip(CircleShape)
-                    .clickable { onContinue() }
-                    .padding(8.dp)
-                    .size(16.dp),
-                tint = actionIconColor
+                onClick = onContinue,
             )
 
             val tts = LocalTTSState.current
