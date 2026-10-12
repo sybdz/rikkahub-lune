@@ -18,16 +18,18 @@ internal object DatabaseBackup {
         database.execSQL("VACUUM main INTO ?", arrayOf(destination.absolutePath))
     }
 
+    fun prepareForUpstream(context: Context, databaseFile: File, paths: BackupFilePaths) {
+        open(context, databaseFile).use { database ->
+            UpstreamBackupCompatibility.prepareDatabase(database, paths)
+            checkpoint(database)
+        }
+        removeSidecars(databaseFile)
+    }
+
     /** Only opens the staged copy. The caller must place its matching WAL beside it first. */
     fun normalize(context: Context, databaseFile: File) {
         require(databaseFile.isFile && databaseFile.length() > 0) { "Backup database is missing or empty" }
-        val configuration = SQLiteConfiguration.configure(
-            context,
-            SQLiteDatabaseConfiguration(databaseFile.absolutePath, SQLiteDatabase.OPEN_READWRITE)
-        )
-        SQLiteDatabase.openDatabase(configuration, null) {
-            error("Backup database is corrupt")
-        }.use { database ->
+        open(context, databaseFile).use { database ->
             checkpoint(database)
             database.query("PRAGMA integrity_check").use { cursor ->
                 check(cursor.moveToFirst() && cursor.getString(0) == "ok" && !cursor.moveToNext()) {
@@ -37,6 +39,14 @@ internal object DatabaseBackup {
         }
         removeSidecars(databaseFile)
     }
+
+    private fun open(context: Context, databaseFile: File): SQLiteDatabase = SQLiteDatabase.openDatabase(
+        SQLiteConfiguration.configure(
+            context,
+            SQLiteDatabaseConfiguration(databaseFile.absolutePath, SQLiteDatabase.OPEN_READWRITE),
+        ),
+        null,
+    ) { error("Backup database is corrupt") }
 
     fun checkpoint(database: SupportSQLiteDatabase) {
         database.query("PRAGMA wal_checkpoint(TRUNCATE)").use { cursor ->

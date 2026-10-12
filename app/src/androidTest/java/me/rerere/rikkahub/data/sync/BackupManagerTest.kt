@@ -5,6 +5,8 @@ import android.content.ContextWrapper
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import kotlinx.coroutines.runBlocking
+import kotlinx.serialization.json.jsonObject
+import kotlinx.serialization.json.jsonPrimitive
 import me.rerere.rikkahub.data.datastore.SettingsStore
 import me.rerere.rikkahub.data.db.AppDatabase
 import me.rerere.rikkahub.data.db.AppDatabaseFactory
@@ -87,11 +89,84 @@ class BackupManagerTest {
         ZipFile(archive).use { zip ->
             assertTrue(zip.getEntry("settings.json") != null)
             assertTrue(zip.getEntry(DatabaseBackup.ARCHIVE_DATABASE) != null)
+            assertTrue(zip.getEntry(UpstreamBackupCompatibility.NATIVE_DATABASE) != null)
+            assertTrue(zip.getEntry(UpstreamBackupCompatibility.NATIVE_SETTINGS) != null)
             assertEquals(null, zip.getEntry(DatabaseBackup.WAL))
             assertEquals(null, zip.getEntry(DatabaseBackup.SHM))
         }
         manager.stageRestore(archive, includeDatabase = true, includeFiles = false)
         assertEquals("live", probe(liveDatabase))
+    }
+
+    @Test fun generatedImagesArePortableAndNativeFilesAreRestored() = runBlocking {
+        val image = File(context.filesDir, "images/legacy.png").apply {
+            parentFile!!.mkdirs()
+            writeText("legacy image")
+        }
+        val tool = File(context.filesDir, "tool_outputs/nested/plot.png").apply {
+            parentFile!!.mkdirs()
+            writeText("tool image")
+        }
+        val archive = manager.createBackup(includeDatabase = false, includeFiles = true)
+        ZipFile(archive).use { zip ->
+            listOf("images/legacy.png", "tool_outputs/nested/plot.png").forEach { relative ->
+                assertTrue(zip.getEntry(BackupFilePaths.archivePath(relative)) != null)
+                assertTrue(zip.getEntry(UpstreamBackupCompatibility.NATIVE_FILES + relative) != null)
+            }
+        }
+        image.delete()
+        tool.delete()
+        manager.stageRestore(archive, includeDatabase = false, includeFiles = true)
+        assertTrue(File(context.noBackupFilesDir, "backup-restore/pending/settings.json").delete())
+        BackupManager.applyPendingRestore(context, JsonInstant)
+        assertEquals("legacy image", image.readText())
+        assertEquals("tool image", tool.readText())
+        assertFalse(File(context.filesDir, BackupFilePaths.archivePath("images/legacy.png")).exists())
+        assertFalse(File(context.filesDir, BackupFilePaths.archivePath("tool_outputs/nested/plot.png")).exists())
+    }
+
+    @Test fun nativeWorkspaceSettingsSurviveBackupRoundTrip() = runBlocking {
+        liveDatabase.openHelper.writableDatabase.execSQL(
+            "INSERT INTO workspaces (id, name, root, shell_status, created_at, updated_at, tool_enabled, system_prompt) " +
+                "VALUES ('workspace', 'workspace', '/workspace', 'ready', 1, 2, '{\"shell\":false}', 'custom prompt')"
+        )
+        val archive = manager.createBackup(includeDatabase = true, includeFiles = false)
+        manager.stageRestore(archive, includeDatabase = true, includeFiles = false)
+        assertTrue(File(context.noBackupFilesDir, "backup-restore/pending/settings.json").delete())
+        liveDatabase.close()
+        BackupManager.applyPendingRestore(context, JsonInstant)
+        liveDatabase = AppDatabaseFactory.create(context)
+        liveDatabase.openHelper.readableDatabase.query("SELECT tool_enabled, system_prompt FROM workspaces").use { cursor ->
+            assertTrue(cursor.moveToFirst())
+            assertEquals("{\"shell\":false}", cursor.getString(0))
+            assertEquals("custom prompt", cursor.getString(1))
+        }
+    }
+
+    @Test fun nativeSettingsArePreferredRegardlessOfZipEntryOrder() = runBlocking {
+        val archive = manager.createBackup(includeDatabase = false, includeFiles = false)
+        val native = ZipFile(archive).use { zip ->
+            JsonInstant.parseToJsonElement(
+                zip.getInputStream(zip.getEntry(UpstreamBackupCompatibility.NATIVE_SETTINGS)).bufferedReader().use { it.readText() }
+            ).jsonObject
+        }
+        val reordered = File(directory, "reordered.zip")
+        ZipOutputStream(reordered.outputStream()).use { zip ->
+            ZipFile(archive).use { source ->
+                for (name in listOf(UpstreamBackupCompatibility.NATIVE_SETTINGS, "settings.json")) {
+                    zip.putNextEntry(ZipEntry(name))
+                    // Deliberately invalidate the upstream entry: this app must only parse its native settings.
+                    if (name == "settings.json") zip.write("invalid upstream settings".toByteArray())
+                    else source.getInputStream(source.getEntry(name)).use { it.copyTo(zip) }
+                    zip.closeEntry()
+                }
+            }
+        }
+        manager.stageRestore(reordered, includeDatabase = false, includeFiles = false)
+        val staged = JsonInstant.parseToJsonElement(
+            File(context.noBackupFilesDir, "backup-restore/pending/settings.json").readText()
+        ).jsonObject
+        assertEquals(native.getValue("assistantId").jsonPrimitive.content, staged.getValue("assistantId").jsonPrimitive.content)
     }
 
     @Test fun mediaCreationFilesKeepTheirDirectoriesAndSkipUnfinishedDownloads() = runBlocking {

@@ -41,20 +41,34 @@ class BackupManager(
         val staging = Files.createTempDirectory(context.cacheDir.toPath(), "backup-").toFile()
         try {
             val settings = settingsStore.settingsFlowRaw.first()
+            val paths = BackupFilePaths(
+                context.filesDir,
+                File(File(context.applicationInfo.dataDir).parentFile, "${BackupFilePaths.UPSTREAM_PACKAGE}/files"),
+                json,
+            )
             ZipOutputStream(FileOutputStream(archive)).use { zip ->
+                val settingsJson = json.encodeToString(settings)
                 zip.putNextEntry(ZipEntry("settings.json"))
-                zip.write(json.encodeToString(settings).toByteArray(Charsets.UTF_8))
+                zip.write(paths.relocateJson(settingsJson).toByteArray(Charsets.UTF_8))
+                zip.closeEntry()
+                zip.putNextEntry(ZipEntry(UpstreamBackupCompatibility.NATIVE_SETTINGS))
+                zip.write(settingsJson.toByteArray(Charsets.UTF_8))
                 zip.closeEntry()
                 if (includeDatabase) {
                     val snapshot = File(staging, SQLiteConfiguration.DATABASE_NAME)
                     DatabaseBackup.createSnapshot(database.openHelper.writableDatabase, snapshot)
+                    addFile(zip, snapshot, UpstreamBackupCompatibility.NATIVE_DATABASE)
+                    DatabaseBackup.prepareForUpstream(context, snapshot, paths)
                     addFile(zip, snapshot, DatabaseBackup.ARCHIVE_DATABASE)
                 }
                 if (includeFiles) {
-                    for (folder in ATTACHMENT_FOLDERS) {
+                    for (folder in ATTACHMENT_FOLDERS + BackupFilePaths.LEGACY_FOLDERS) {
                         val directory = File(context.filesDir, folder)
-                        val files = if (folder in NESTED_ATTACHMENT_FOLDERS) directory.walkTopDown().asSequence()
-                        else directory.listFiles().orEmpty().asSequence()
+                        val files = if (folder in NESTED_ATTACHMENT_FOLDERS || folder in BackupFilePaths.LEGACY_FOLDERS) {
+                            directory.walkTopDown().asSequence()
+                        } else {
+                            directory.listFiles().orEmpty().asSequence()
+                        }
                         for (file in files.filter { it.isFile }) {
                             currentCoroutineContext().ensureActive()
                             // A media result still being downloaded is incomplete and gets renamed when it finishes.
@@ -63,7 +77,11 @@ class BackupManager(
                             ) continue
                             val relative = file.relativeTo(directory).invariantSeparatorsPath
                             PendingRestore.resolveInside(directory, relative)
-                            addFile(zip, file, "$folder/$relative")
+                            val name = "$folder/$relative"
+                            addFile(zip, file, BackupFilePaths.archivePath(name))
+                            if (folder in BackupFilePaths.LEGACY_FOLDERS) {
+                                addFile(zip, file, UpstreamBackupCompatibility.NATIVE_FILES + name)
+                            }
                         }
                     }
                 }
@@ -89,15 +107,33 @@ class BackupManager(
                     val seen = mutableSetOf<String>()
                     var restoredEntries = 0
                     ZipFile(archive).use { zip ->
+                        val nativeDatabase = hasFile(zip, UpstreamBackupCompatibility.NATIVE_DATABASE)
+                        val nativeSettings = hasFile(zip, UpstreamBackupCompatibility.NATIVE_SETTINGS)
+                        // Restore the originals, not a second copy of the same legacy attachments in upload/.
+                        val portableCopies = if (includeFiles) {
+                            zip.entries().asSequence()
+                                .filter { !it.isDirectory && isNativeAttachment(it.name) }
+                                .map { BackupFilePaths.archivePath(it.name.removePrefix(UpstreamBackupCompatibility.NATIVE_FILES)) }
+                                .toSet()
+                        } else {
+                            emptySet()
+                        }
                         for (entry in zip.entries()) {
                             currentCoroutineContext().ensureActive()
                             if (entry.isDirectory) continue
                             val target = when (entry.name) {
-                                "settings.json" -> File(staging, "settings.json")
-                                DatabaseBackup.ARCHIVE_DATABASE -> if (includeDatabase) stagedDatabase else null
-                                DatabaseBackup.WAL -> if (includeDatabase) stagedWal else null
+                                "settings.json" -> if (!nativeSettings) File(staging, "settings.json") else null
+                                UpstreamBackupCompatibility.NATIVE_SETTINGS -> File(staging, "settings.json")
+                                UpstreamBackupCompatibility.NATIVE_DATABASE -> if (includeDatabase) stagedDatabase else null
+                                DatabaseBackup.ARCHIVE_DATABASE -> if (includeDatabase && !nativeDatabase) stagedDatabase else null
+                                DatabaseBackup.WAL -> if (includeDatabase && !nativeDatabase) stagedWal else null
                                 DatabaseBackup.SHM -> null // Rebuilt by SQLite; never restore shared-memory state.
-                                else -> if (includeFiles && isAttachment(entry.name)) {
+                                else -> if (includeFiles && isNativeAttachment(entry.name)) {
+                                    PendingRestore.resolveInside(
+                                        File(payload, "files"),
+                                        entry.name.removePrefix(UpstreamBackupCompatibility.NATIVE_FILES),
+                                    )
+                                } else if (includeFiles && entry.name !in portableCopies && isAttachment(entry.name)) {
                                     PendingRestore.resolveInside(File(payload, "files"), entry.name)
                                 } else null
                             } ?: continue
@@ -151,6 +187,17 @@ class BackupManager(
         require(folder in NESTED_ATTACHMENT_FOLDERS || '/' !in relative) { "Invalid backup attachment: $name" }
         return true
     }
+
+    private fun isNativeAttachment(name: String): Boolean {
+        if (!name.startsWith(UpstreamBackupCompatibility.NATIVE_FILES)) return false
+        val relative = name.removePrefix(UpstreamBackupCompatibility.NATIVE_FILES)
+        return '/' in relative && relative.substringBefore('/') in BackupFilePaths.LEGACY_FOLDERS
+    }
+
+    private fun hasFile(zip: ZipFile, name: String): Boolean = zip.getEntry(name)?.let {
+        require(!it.isDirectory) { "Invalid backup entry: $name" }
+        true
+    } ?: false
 
     private fun addFile(zip: ZipOutputStream, file: File, name: String) {
         zip.putNextEntry(ZipEntry(name))
