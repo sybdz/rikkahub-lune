@@ -85,6 +85,7 @@ interface CardGroupScope {
         modifier: Modifier = Modifier,
         headlineContent: (@Composable () -> Unit)? = null,
         supportingContent: (@Composable () -> Unit)? = null,
+        leadingContent: (@Composable () -> Unit)? = null,
         trailingContent: (@Composable () -> Unit)? = null,
         content: @Composable ColumnScope.() -> Unit,
     )
@@ -121,6 +122,7 @@ private class CardGroupScopeImpl : CardGroupScope {
         modifier: Modifier,
         headlineContent: (@Composable () -> Unit)?,
         supportingContent: (@Composable () -> Unit)?,
+        leadingContent: (@Composable () -> Unit)?,
         trailingContent: (@Composable () -> Unit)?,
         content: @Composable ColumnScope.() -> Unit,
     ) {
@@ -131,7 +133,7 @@ private class CardGroupScopeImpl : CardGroupScope {
                 overlineContent = null,
                 headlineContent = headlineContent,
                 supportingContent = supportingContent,
-                leadingContent = null,
+                leadingContent = leadingContent,
                 trailingContent = trailingContent,
                 colors = null,
                 formContent = content,
@@ -200,6 +202,28 @@ fun CardGroupIcon(
     }
 }
 
+// 标题行右侧显示当前取值的小标签，比如滑块的数值
+@Composable
+fun CardGroupValue(
+    text: String,
+    modifier: Modifier = Modifier,
+) {
+    Surface(
+        modifier = modifier,
+        shape = CircleShape,
+        color = MaterialTheme.colorScheme.secondaryContainer,
+        contentColor = MaterialTheme.colorScheme.onSecondaryContainer,
+    ) {
+        Text(
+            text = text,
+            modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp),
+            // 等宽数字，拖动滑块时标签宽度不跳
+            style = MaterialTheme.typography.labelLarge.copy(fontFeatureSettings = "tnum"),
+            maxLines = 1,
+        )
+    }
+}
+
 @Composable
 private fun CardGroupFormItem(
     item: CardGroupItem,
@@ -216,12 +240,13 @@ private fun CardGroupFormItem(
             modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
-            if (item.headlineContent != null || item.trailingContent != null) {
+            if (item.headlineContent != null || item.leadingContent != null || item.trailingContent != null) {
                 Row(
-                    // 和 ListItem 一致：带说明文字时，右侧内容靠上对齐
+                    // 和 ListItem 一致：带说明文字时，两侧内容靠上对齐
                     verticalAlignment = if (item.supportingContent != null) Alignment.Top else Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(16.dp),
                 ) {
+                    item.leadingContent?.invoke()
                     Column(
                         modifier = Modifier.weight(1f),
                         verticalArrangement = Arrangement.spacedBy(2.dp),
