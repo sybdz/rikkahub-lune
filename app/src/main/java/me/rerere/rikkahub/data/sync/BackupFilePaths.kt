@@ -33,11 +33,14 @@ internal class BackupFilePaths(
         return if (uri != null) URI("file", "", target.absolutePath, null).toASCIIString() else target.absolutePath
     }
 
-    fun relocateJson(value: String, pathsOnly: Boolean = false): String {
+    fun relocateJson(value: String): String {
         val original = json.parseToJsonElement(value)
-        val relocated = relocateElement(original, pathsOnly)
+        val relocated = relocateElement(original)
         return if (relocated == original) value else json.encodeToString(relocated)
     }
+
+    // GenMediaEntity.sourcePaths stores one path per line, not a JSON array.
+    fun relocatePathList(value: String): String = value.splitToSequence('\n').joinToString("\n", transform = ::relocate)
 
     private fun relocateElement(element: JsonElement, isPath: Boolean = false): JsonElement = when (element) {
         is JsonObject -> JsonObject(element.mapValues { (key, value) ->

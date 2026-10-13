@@ -1,5 +1,6 @@
 package me.rerere.rikkahub.ui.pages.backup.tabs
 
+import android.provider.DocumentsContract
 import me.rerere.hugeicons.HugeIcons
 import me.rerere.hugeicons.stroke.File01
 import me.rerere.hugeicons.stroke.FileImport
@@ -31,7 +32,11 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.dokar.sonner.ToastType
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import me.rerere.rikkahub.R
 import me.rerere.rikkahub.data.datastore.WebDavConfig
 import me.rerere.rikkahub.ui.components.ui.CardGroup
@@ -67,32 +72,44 @@ fun ImportExportTab(
         uri?.let { targetUri ->
             scope.launch {
                 isExporting = true
-                runCatching {
-                    // 导出文件
-                    val exportFile = vm.exportToFile()
-
-                    // 复制到用户选择的位置
-                    context.contentResolver.openOutputStream(targetUri)?.use { outputStream ->
-                        FileInputStream(exportFile).use { inputStream ->
-                            inputStream.copyTo(outputStream)
+                var exportFile: File? = null
+                var exportCompleted = false
+                try {
+                    val archive = vm.exportToFile()
+                    exportFile = archive
+                    withContext(Dispatchers.IO) {
+                        checkNotNull(context.contentResolver.openOutputStream(targetUri)) {
+                            "Cannot write to the selected backup file"
+                        }.use { outputStream ->
+                            FileInputStream(archive).use { inputStream ->
+                                inputStream.copyTo(outputStream)
+                            }
                         }
                     }
-
-                    // 清理临时文件
-                    exportFile.delete()
-
+                    exportCompleted = true
                     toaster.show(
                         context.getString(R.string.backup_page_backup_success),
                         type = ToastType.Success
                     )
-                }.onFailure { e ->
+                } catch (e: CancellationException) {
+                    throw e
+                } catch (e: Exception) {
                     e.printStackTrace()
                     toaster.show(
                         context.getString(R.string.backup_page_restore_failed, e.message ?: ""),
                         type = ToastType.Error
                     )
+                } finally {
+                    withContext(NonCancellable + Dispatchers.IO) {
+                        exportFile?.delete()
+                        if (!exportCompleted) {
+                            // CreateDocument creates an empty destination before the backup is prepared.
+                            runCatching { DocumentsContract.deleteDocument(context.contentResolver, targetUri) }
+                                .onFailure { it.printStackTrace() }
+                        }
+                    }
+                    isExporting = false
                 }
-                isExporting = false
             }
         }
     }

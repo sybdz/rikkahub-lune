@@ -1,6 +1,7 @@
 package me.rerere.rikkahub.data.sync
 
 import androidx.sqlite.db.SupportSQLiteDatabase
+import kotlinx.serialization.SerializationException
 
 /** Schema 25 is accepted by upstream 2.5.6 and migrates normally in newer upstream builds. */
 internal object UpstreamBackupCompatibility {
@@ -35,9 +36,12 @@ internal object UpstreamBackupCompatibility {
             database.execSQL("CREATE INDEX index_workspaces_updated_at ON workspaces (updated_at)")
 
             relocateColumn(database, "message_node", "messages") { paths.relocateJson(it) }
-            relocateColumn(database, "favorites", "snapshot_json") { paths.relocateJson(it) }
+            relocateColumn(database, "favorites", "snapshot_json") {
+                // Node favorites reference the live message node and intentionally have no snapshot.
+                if (it.isBlank()) it else paths.relocateJson(it)
+            }
             relocateColumn(database, "GenMediaEntity", "path", paths::relocate)
-            relocateColumn(database, "GenMediaEntity", "source_paths") { paths.relocateJson(it, pathsOnly = true) }
+            relocateColumn(database, "GenMediaEntity", "source_paths", paths::relocatePathList)
             relocateColumn(database, "managed_files", "relative_path") { BackupFilePaths.archivePath(it) }
             database.execSQL("UPDATE managed_files SET folder = 'upload' WHERE folder IN ('images', 'tool_outputs')")
             // Extra media-creation tables are kept: upstream 2.5.6 ignores them, newer versions use them.
@@ -67,7 +71,11 @@ internal object UpstreamBackupCompatibility {
             }
             if (rows.isEmpty()) break
             rows.forEach { (id, value) ->
-                val relocated = transform(value)
+                val relocated = try {
+                    transform(value)
+                } catch (e: SerializationException) {
+                    throw SerializationException("Invalid backup JSON: $table.$column (row $id)", e)
+                }
                 if (relocated != value) {
                     database.execSQL("UPDATE `$table` SET `$column` = ? WHERE rowid = ?", arrayOf<Any>(relocated, id))
                 }

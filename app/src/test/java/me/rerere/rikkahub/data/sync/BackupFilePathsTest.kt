@@ -74,11 +74,17 @@ class BackupFilePathsTest {
         }
     }
 
-    @Test fun legacySourcePathArraysAreRelocatedAndNullValuesPreserved() {
-        val value = """["$source/upload/a.png", "https://example.com/b.png", null]"""
-        val result = json.parseToJsonElement(paths.relocateJson(value, pathsOnly = true)).jsonArray
-        assertEquals("$target/upload/a.png", result[0].jsonPrimitive.content)
-        assertEquals("https://example.com/b.png", result[1].jsonPrimitive.content)
-        assertEquals("null", result[2].toString())
+    @Test fun imageEditSourcePathsKeepTheirNewlineSeparatedFormat() {
+        val value = "$source/upload/a.png\nfile://$source/upload/b.png\nhttps://example.com/c.png"
+        assertEquals(
+            "$target/upload/a.png\nfile://$target/upload/b.png\nhttps://example.com/c.png",
+            paths.relocatePathList(value),
+        )
+    }
+
+    @Test fun singleSourcePathAndEmptyEntriesDoNotRequireJson() {
+        assertEquals("$target/upload/a.png", paths.relocatePathList("$source/upload/a.png"))
+        assertEquals("", paths.relocatePathList(""))
+        assertEquals("\n$target/upload/a.png\n", paths.relocatePathList("\n$source/upload/a.png\n"))
     }
 }

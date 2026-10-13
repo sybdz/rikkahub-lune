@@ -121,13 +121,52 @@ class UpstreamBackupCompatibilityTest {
             var failed = false
             try {
                 DatabaseBackup.prepareForUpstream(context, snapshot, paths)
-            } catch (_: kotlinx.serialization.SerializationException) {
+            } catch (e: kotlinx.serialization.SerializationException) {
                 failed = true
+                assertTrue(e.message.orEmpty().contains("favorites.snapshot_json"))
             }
             assertTrue(failed)
             open(snapshot).use { db ->
                 assertEquals(27, db.version)
                 assertTrue(pragma(db, "table_info(workspaces)").any { it[1] == "system_prompt" })
+                assertEquals("ok", scalar(db, "PRAGMA integrity_check"))
+            }
+        } finally {
+            directory.deleteRecursively()
+        }
+    }
+
+    @Test fun emptyNodeSnapshotsAndNewlineImageSourcesAreExported() {
+        val directory = Files.createTempDirectory(context.cacheDir.toPath(), "upstream-backup-records-").toFile()
+        val snapshot = File(directory, "snapshot")
+        val targetFiles = File(directory, "upstream-files")
+        val paths = BackupFilePaths(context.filesDir, targetFiles, JsonInstant)
+        val sources = "${context.filesDir}/upload/a.png\nfile://${context.filesDir}/upload/b.png"
+        try {
+            val room = AppDatabaseFactory.create(context, File(directory, "live").absolutePath)
+            try {
+                val db = room.openHelper.writableDatabase
+                db.execSQL(
+                    "INSERT INTO favorites (id, type, ref_key, ref_json, snapshot_json, created_at, updated_at) " +
+                        "VALUES ('favorite', 'node', 'reference', '{}', '', 1, 2)"
+                )
+                db.execSQL(
+                    "INSERT INTO GenMediaEntity (path, model_id, prompt, create_at, source_paths) VALUES (?, 'model', 'prompt', 1, ?)",
+                    arrayOf("${context.filesDir}/images/result.png", sources),
+                )
+                DatabaseBackup.createSnapshot(db, snapshot)
+                DatabaseBackup.prepareForUpstream(context, snapshot, paths)
+                assertEquals(sources, scalar(db, "SELECT source_paths FROM GenMediaEntity"))
+            } finally {
+                room.close()
+            }
+            open(snapshot).use { db ->
+                assertEquals(25, db.version)
+                assertEquals("", scalar(db, "SELECT snapshot_json FROM favorites"))
+                assertEquals(
+                    "$targetFiles/upload/a.png\nfile://$targetFiles/upload/b.png",
+                    scalar(db, "SELECT source_paths FROM GenMediaEntity"),
+                )
                 assertEquals("ok", scalar(db, "PRAGMA integrity_check"))
             }
         } finally {
