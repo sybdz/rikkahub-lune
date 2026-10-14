@@ -88,7 +88,7 @@ import me.rerere.rikkahub.ui.components.ui.UpdateCard
 import androidx.compose.ui.draw.clip
 import me.rerere.rikkahub.ui.context.LocalToaster
 import me.rerere.rikkahub.ui.context.Navigator
-import com.dokar.sonner.ToastType
+import me.rerere.ui.toast.ToastType
 import me.rerere.rikkahub.ui.hooks.EditStateContent
 import me.rerere.rikkahub.ui.hooks.readBooleanPreference
 import me.rerere.rikkahub.ui.hooks.rememberIsPlayStoreVersion
@@ -397,14 +397,6 @@ fun ChatDrawerContent(
                         expanded = showMenuPopup,
                         onDismissRequest = { showMenuPopup = false }
                     ) {
-                        DropdownMenuItem(
-                            text = { Text(stringResource(R.string.chat_page_menu_ai_translator)) },
-                            leadingIcon = { Icon(HugeIcons.LanguageCircle, null) },
-                            onClick = {
-                                showMenuPopup = false
-                                navController.navigate(Screen.Translator)
-                            }
-                        )
                         DropdownMenuItem(
                             text = { Text(stringResource(R.string.chat_page_menu_image_generation)) },
                             leadingIcon = { Icon(HugeIcons.Image02, null) },
@@ -730,18 +722,14 @@ fun ChatDrawerContent(
 @Composable
 private fun DrawerActions(navController: Navigator) {
     Column {
-        // 搜索入口
-        DrawerEntry(
-            icon = HugeIcons.Search01,
-            text = stringResource(R.string.chat_page_search_chats),
-            onClick = { navController.navigate(Screen.MessageSearch) },
-        )
-
-        // 历史记录入口
+        // 历史记录入口，行尾是搜索入口
         DrawerEntry(
             icon = HugeIcons.TransactionHistory,
             text = stringResource(R.string.chat_page_history),
             onClick = { navController.navigate(Screen.History) },
+            trailingIcon = HugeIcons.Search01,
+            trailingDescription = stringResource(R.string.chat_page_search_chats),
+            onTrailingClick = { navController.navigate(Screen.MessageSearch) },
         )
 
         // 媒体创作入口
@@ -749,6 +737,13 @@ private fun DrawerActions(navController: Navigator) {
             icon = HugeIcons.ImageToVideo,
             text = stringResource(R.string.media_creation_title),
             onClick = { navController.navigate(Screen.MediaCreationSessions) },
+        )
+
+        // 翻译入口
+        DrawerEntry(
+            icon = HugeIcons.LanguageCircle,
+            text = stringResource(R.string.chat_page_menu_ai_translator),
+            onClick = { navController.navigate(Screen.Translator) },
         )
     }
 }
@@ -758,6 +753,9 @@ private fun DrawerEntry(
     icon: ImageVector,
     text: String,
     onClick: () -> Unit,
+    trailingIcon: ImageVector? = null,
+    trailingDescription: String? = null,
+    onTrailingClick: () -> Unit = {},
 ) {
     Surface(
         onClick = onClick,
@@ -767,24 +765,44 @@ private fun DrawerEntry(
         shape = MaterialTheme.shapes.medium,
         color = MaterialTheme.colorScheme.surfaceContainerLow,
     ) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 8.dp, vertical = 10.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(12.dp),
-        ) {
-            Icon(
-                imageVector = icon,
-                contentDescription = null,
-                modifier = Modifier.size(18.dp),
-                tint = MaterialTheme.colorScheme.onSurface,
-            )
-            Text(
-                text = text,
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurface,
-            )
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Row(
+                modifier = Modifier
+                    .weight(1f)
+                    .padding(horizontal = 8.dp, vertical = 10.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
+            ) {
+                Icon(
+                    imageVector = icon,
+                    contentDescription = null,
+                    modifier = Modifier.size(18.dp),
+                    tint = MaterialTheme.colorScheme.onSurface,
+                )
+                Text(
+                    text = text,
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurface,
+                )
+            }
+            if (trailingIcon != null) {
+                // 不用 IconButton，它的 48dp 最小尺寸会把这一行撑得比其他行高
+                Box(
+                    modifier = Modifier
+                        .padding(end = 4.dp)
+                        .size(32.dp)
+                        .clip(CircleShape)
+                        .clickable(onClick = onTrailingClick),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Icon(
+                        imageVector = trailingIcon,
+                        contentDescription = trailingDescription,
+                        modifier = Modifier.size(18.dp),
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+            }
         }
     }
 }
