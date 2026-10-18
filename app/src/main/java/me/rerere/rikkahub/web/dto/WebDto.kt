@@ -16,6 +16,8 @@ import me.rerere.rikkahub.data.model.MessageNode
 @Serializable
 data class SendMessageRequest(
     val parts: List<UIMessagePart>,
+    // 新会话首条消息归入的文件夹；已存在的会话忽略
+    val folderId: String? = null,
 )
 
 @Serializable
@@ -228,6 +230,7 @@ data class MessageDto(
     val modelId: String? = null,
     val modelSnapshot: ModelSnapshot? = null,
     val usage: TokenUsage? = null,
+    val generationTimeMs: Long? = null,
     val translation: String? = null,
     val isContextCheckpoint: Boolean = false,
 )
@@ -370,6 +373,7 @@ fun UIMessage.toDto() = MessageDto(
     modelId = modelId?.toString(),
     modelSnapshot = modelSnapshot,
     usage = usage,
+    generationTimeMs = generationTimeMs,
     translation = translation,
     isContextCheckpoint = isContextCheckpoint,
 )

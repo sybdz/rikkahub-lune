@@ -17,10 +17,10 @@ import me.rerere.rikkahub.BuildConfig
 import me.rerere.rikkahub.data.ai.AIRequestInterceptor
 import me.rerere.rikkahub.data.ai.RequestLoggingInterceptor
 import me.rerere.rikkahub.data.ai.transformers.AssistantTemplateLoader
-import me.rerere.rikkahub.data.ai.GenerationLoop
 import me.rerere.rikkahub.data.ai.MemoryConsolidationScheduler
 import me.rerere.rikkahub.data.ai.MemoryConsolidator
 import me.rerere.rikkahub.data.ai.TranslationHandler
+import me.rerere.rikkahub.data.ai.ConversationMetaGenerator
 import me.rerere.rikkahub.data.ai.transformers.TemplateTransformer
 import me.rerere.rikkahub.data.remote.RikkaHubAPI
 import me.rerere.rikkahub.data.remote.SponsorAPI
@@ -129,16 +129,8 @@ val dataSourceModule = module {
     single { McpManager(settingsStore = get(), appScope = get(), filesManager = get()) }
 
     single {
-        GenerationLoop(
-            context = get(),
-            providerManager = get(),
-            json = get(),
-        )
-    }
-
-    single {
         MemoryConsolidator(
-            generationLoop = get(),
+            providerManager = get(),
             memoryRepository = get(),
             conversationRepo = get(),
             consolidationDao = get(),
@@ -157,6 +149,10 @@ val dataSourceModule = module {
 
     single {
         TranslationHandler(providerManager = get())
+    }
+
+    single {
+        ConversationMetaGenerator(context = get(), providerManager = get())
     }
 
     single<OkHttpClient> {
