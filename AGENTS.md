@@ -21,12 +21,17 @@ Material 3 look (cards with dividers, plain forms).
 ## Build, Test, and Development Commands
 
 ```bash
-./gradlew assembleDebug          # 构建 Debug APK
+./gradlew assembleGithubDebug    # 构建 GitHub 渠道的 Debug APK
+./gradlew assembleGithubRelease  # 构建 GitHub Release / 每日构建用的 APK
+./gradlew bundlePlayRelease      # 构建上架 Google Play 的 AAB
 ./gradlew test                   # 运行所有模块的 JVM 单元测试
 ./gradlew lint                   # 运行 Android Lint
 ./gradlew spotlessApply          # 用 ktlint 格式化相对 origin/master 改动过的 Kotlin 文件
 ./gradlew spotlessCheck          # 只检查格式不改文件
 ```
+
+App 有一个 `distribution` 维度的 product flavor：`github`（默认）和 `play`，共用同一个 applicationId。
+渠道差异用 `BuildConfig.IS_PLAY_STORE` 判断（如 Play 版不检查更新、不显示更新提醒）。
 
 ## Module Structure
 
@@ -42,6 +47,10 @@ Material 3 look (cards with dividers, plain forms).
 - **web**: Embedded web server module that provides Ktor server startup function and hosts static frontend build files (
   built from web-ui/ React project)
 - **workspace**: Sandboxed per-workspace file system and shell execution environment exposed to the AI as tools.
+- **terminal**: Terminal emulator core taken from termux-app's `terminal-emulator` (package `com.termux.terminal`, kept
+  binary compatible with the `terminal-view` aar). `TerminalSession` runs over a `TerminalTransport`: local PRoot
+  terminals use `LocalPtyTransport`, SSH workspaces use the app's `SshTerminalTransport`. Origin and local changes are
+  listed in terminal/README.md.
 
 ## Concepts
 
@@ -97,4 +106,4 @@ Material 3 look (cards with dividers, plain forms).
 - Page-specific strings should use page prefix (e.g., `setting_page_`)
 - If the user does not explicitly request localization, prioritize implementing functionality without considering
   localization. (e.g `Text("Hello world")`)
-- For `locale-tui` operations, use the `locale-tui-localization` skill.
+- Add, translate or clean up strings with the `tools/i18n` CLI (Bun); see the `i18n-localization` skill.

@@ -1,0 +1,127 @@
+# i18n 配置文件
+
+# 项目根路径 (相对于 tools/i18n 目录)
+project_root: "../.."
+
+# 模块配置：每个模块的资源目录
+modules:
+  - name: "app"
+    res_path: "app/src/main/res"
+  - name: "search"
+    res_path: "search/src/main/res"
+  - name: "oauth"
+    res_path: "oauth/src/main/res"
+  - name: "ui"
+    res_path: "ui/src/main/res"
+
+# 扫描这些文件中的 R.string.xxx / @string/xxx 引用，用于检测未使用的条目
+source_patterns:
+  - "*/src/main/**/*.kt"
+  - "*/src/main/**/*.java"
+  - "*/src/main/AndroidManifest.xml"
+  - "*/src/main/res/xml/*.xml"
+
+# 支持的语言列表
+languages:
+  - code: "values"
+    name: "English"
+    is_source: true
+  - code: "values-zh"
+    name: "Chinese (Simplified)"
+    glossary:
+      prompt: "提示词（不要译为“提示”）"
+      context: "上下文"
+      model: "模型"
+      inference: "推理"
+      dreaming: "做梦（后台整理记忆的功能名）"
+  - code: "values-zh-rTW"
+    name: "Chinese (Traditional)"
+    glossary:
+      prompt: "提示詞（不要譯為「提示」）"
+      context: "上下文"
+      model: "模型"
+      inference: "推理"
+      dreaming: "做夢（背景整理記憶的功能名）"
+  - code: "values-ja"
+    name: "Japanese"
+    glossary:
+      memory: "記憶（「メモリ」としない）"
+      dreaming: "夢を見る（記憶を整理する機能の名称。「ドリーミング」と音訳しない）"
+  - code: "values-ko-rKR"
+    name: "Korean"
+    glossary:
+      memory: "기억 (메모리로 옮기지 않음)"
+      dreaming: "꿈꾸기 (기억을 정리하는 기능의 이름. 드리밍으로 음역하지 않음)"
+  - code: "values-ru"
+    name: "Russian"
+  - code: "values-de"
+    name: "German"
+    # 用 du 称呼用户，AI 领域常用的英文术语保留英文
+    glossary:
+      you: "du (informal; never Sie)"
+      prompt: "Prompt (plural Prompts); never Eingabeaufforderung"
+      system prompt: "Systemprompt"
+      context: "Kontext"
+      model: "Modell"
+      provider: "Anbieter"
+      assistant: "Assistent"
+      agent: "Agent"
+      tool: "Tool"
+      reasoning: "Reasoning"
+      thinking: "Denken"
+      workspace: "Arbeitsbereich"
+      skill: "Skill"
+      memory: "Erinnerung (plural Erinnerungen); never Speicher"
+      dreaming: "Träumen (name of the background memory-consolidation feature)"
+      lorebook: "Lorebook"
+      settings: "Einstellungen"
+  - code: "values-ar"
+    name: "Arabic"
+    # 使用不带冠词的基本形式，由模型按语法变格
+    glossary:
+      prompt: "مطالبة (plural مطالبات); never موجه"
+      system prompt: "مطالبة النظام"
+      prompt injection: "حقن مطالبات (definite: حقن المطالبات)"
+      mode injection: "حقن أوضاع (definite: حقن الأوضاع)"
+      lorebook: "كتاب معرفة (plural كتب معرفة; add ال only where grammar requires); never leave Lorebook in English"
+      provider: "مزوّد (plural مزوّدون / مزوّدي); never موفر"
+      context: "سياق"
+      model: "نموذج"
+      assistant: "مساعد"
+      agent: "وكيل"
+      tool: "أداة"
+      reasoning: "استدلال"
+      thinking: "تفكير"
+      workspace: "مساحة عمل"
+      skill: "مهارة"
+      extension: "إضافة"
+      memory: "ذاكرة"
+      quick message: "رسالة سريعة"
+
+# AI 翻译配置
+translation:
+  batch_size: 10
+  temperature: 1.0
+  # 服务端支持 json_schema 时开启，否则使用 json_object 模式
+  structured_outputs: false
+  model: "deepseek-flash"
+  prompt_template: |
+    You are a professional translator specializing in mobile app localization.
+
+    App context: This is an AI LLM chat client app that allows users to chat with AI models from various providers (OpenAI, Anthropic, Google, DeepSeek, etc.). The UI strings contain AI/LLM-specific terminology that must be translated accurately.
+
+    Translate the following Android app string resources from English to {target_language}.
+
+    Important guidelines:
+    1. Preserve all Android string placeholders like %1$s, %1$d, %s, %d exactly as they are
+    2. Keep special characters like \n, \', &amp;, etc.
+    3. Maintain the same tone and style (formal/informal) as the source
+    4. For UI text, keep it concise
+    5. Do not translate brand names or technical terms that should remain in English (e.g. OpenAI, Anthropic, Token, API)
+    6. Use established AI/LLM terminology in the target language
+
+    Source strings (JSON format):
+    {source_strings}
+
+    Respond with a JSON object mapping the same keys to translated values.
+    Only output the JSON, no other text.
