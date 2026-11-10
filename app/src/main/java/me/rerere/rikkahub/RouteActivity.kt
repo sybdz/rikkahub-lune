@@ -130,6 +130,7 @@ import me.rerere.rikkahub.ui.pages.setting.SettingProviderPage
 import me.rerere.rikkahub.ui.pages.setting.SettingSearchDetailPage
 import me.rerere.rikkahub.ui.pages.setting.SettingSearchPage
 import me.rerere.rikkahub.ui.pages.setting.SettingMediaPage
+import me.rerere.rikkahub.ui.pages.setting.SettingMediaProviderDetailPage
 import me.rerere.rikkahub.ui.pages.setting.SettingSpeechPage
 import me.rerere.rikkahub.ui.pages.setting.SettingWebPage
 import me.rerere.rikkahub.ui.pages.share.handler.ShareHandlerPage
@@ -332,7 +333,8 @@ class RouteActivity : ComponentActivity() {
                             rememberViewModelStoreNavEntryDecorator(),
                         ),
                         modifier = Modifier.fillMaxSize(),
-                        onBack = { backStack.removeLastOrNull() },
+                        // 同一帧内连续两次返回时 NavDisplay 的返回状态还没更新，会多回调一次，不加判断会把栈弹空
+                        onBack = { if (backStack.size > 1) backStack.removeLastOrNull() },
                         transitionSpec = {
                             if (backStack.size == 1) fadeIn() togetherWith fadeOut()
                             else {
@@ -509,6 +511,10 @@ class RouteActivity : ComponentActivity() {
 
                             entry<Screen.SettingMedia> {
                                 SettingMediaPage()
+                            }
+
+                            entry<Screen.SettingMediaProviderDetail> { key ->
+                                SettingMediaProviderDetailPage(id = Uuid.parse(key.providerId))
                             }
 
                             entry<Screen.SettingMcp> {
@@ -758,6 +764,9 @@ sealed interface Screen : NavKey {
 
     @Serializable
     data object SettingMedia : Screen
+
+    @Serializable
+    data class SettingMediaProviderDetail(val providerId: String) : Screen
 
     @Serializable
     data object SettingMcp : Screen

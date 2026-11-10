@@ -40,6 +40,9 @@ data class Settings(
     val chatModelId: Uuid = Uuid.random(),
     val fastModelId: Uuid = Uuid.random(),
     val fastModelReasoningLevel: ReasoningLevel = ReasoningLevel.AUTO,
+    // 记忆整理用的模型，没设置时用快速模型
+    val memoryModelId: Uuid? = null,
+    val memoryModelReasoningLevel: ReasoningLevel = ReasoningLevel.AUTO,
     val imageGenerationModelId: Uuid = Uuid.random(),
     val enableAutoTitle: Boolean = true,
     val titlePrompt: String = DEFAULT_TITLE_PROMPT,
@@ -50,6 +53,9 @@ data class Settings(
     val translateTargetLanguage: String = "zh-CN",
     val enableSuggestion: Boolean = true,
     val suggestionPrompt: String = DEFAULT_SUGGESTION_PROMPT,
+    // 回复结束后上下文占用达到聊天模型上下文窗口的 autoCompressThreshold 时自动压缩历史
+    val enableAutoCompress: Boolean = false,
+    val autoCompressThreshold: Float = 0.8f,
     val ocrModelId: Uuid = Uuid.random(),
     val ocrPrompt: String = DEFAULT_OCR_PROMPT,
     val assistantId: Uuid = DEFAULT_ASSISTANT_ID,

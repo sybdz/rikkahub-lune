@@ -332,6 +332,43 @@ class AgentLoopTest {
     }
 
     @Test
+    fun `pausing after tools ends the run before the next request and a rerun continues`() = runTest {
+        val pausing = object : AgentHooks by hooks {
+            val asked = mutableListOf<UIMessage>()
+
+            override suspend fun shouldPause(message: UIMessage): Boolean {
+                asked += message
+                return true
+            }
+        }
+        provider.stream {
+            toolCall("call-1", "search")
+            finish()
+        }
+
+        val paused = runToEnd(request(tools = listOf(tool("search"))), pausing).finished()
+
+        assertEquals(AgentFinishReason.Paused, paused.reason)
+        assertTrue(paused.message.tool("call-1").isExecuted)
+        assertEquals(1, provider.requests.size)
+        assertTrue(pausing.asked.single().tool("call-1").isExecuted)
+
+        // 接着这条消息再运行：工具已经执行完，不会还没请求模型就再次暂停
+        provider.stream {
+            text("done")
+            finish()
+        }
+        val finished = runToEnd(
+            request(messages = listOf(UIMessage.user("hi"), paused.message), tools = listOf(tool("search"))),
+            pausing,
+        ).finished()
+
+        assertEquals(AgentFinishReason.Completed, finished.reason)
+        assertEquals(listOf("done"), finished.message.texts())
+        assertEquals(1, pausing.asked.size)
+    }
+
+    @Test
     fun `step limit ends the run after the last request's tools are executed`() = runTest {
         provider.stream {
             toolCall("call-1", "search")
@@ -495,6 +532,82 @@ class AgentLoopTest {
 
         assertEquals(listOf("before!", "after!"), message.texts())
     }
+
+    @Test
+    fun `pending parts start a new turn and go out with the first request`() = runTest {
+        val noticeHooks = PendingHooks(hooks, listOf(notice("a")))
+        provider.stream {
+            text("seen")
+            finish()
+        }
+
+        val events = runToEnd(hooks = noticeHooks)
+
+        val message = events.finished().message
+        assertEquals(notice("a"), message.parts.first())
+        assertEquals(listOf("seen"), message.texts())
+        assertEquals(model.id, message.modelId)
+        assertEquals(notice("a"), provider.requests.single().messages.last().parts.single())
+        // 追加的 part 不算这一步生成的
+        assertEquals(listOf(1), hooks.newPartsFrom)
+        assertEquals(setOf(message.id), events.messageIds())
+    }
+
+    @Test
+    fun `pending parts are appended after executed tools`() = runTest {
+        val noticeHooks = PendingHooks(hooks, emptyList(), listOf(notice("a")))
+        provider.stream {
+            toolCall("call-1", "search")
+            finish()
+        }
+        provider.stream {
+            text("done")
+            finish()
+        }
+
+        val message = runToEnd(request(tools = listOf(tool("search"))), noticeHooks).finished().message
+
+        assertEquals(
+            listOf(UIMessagePart.Tool::class, UIMessagePart.Notice::class, UIMessagePart.Text::class),
+            message.parts.map { it::class },
+        )
+        assertEquals(notice("a"), provider.requests[1].messages.last().parts.last())
+    }
+
+    @Test
+    fun `a message ending with a notice is answered as a new turn`() = runTest {
+        val noticeHooks = PendingHooks(hooks, listOf(notice("b")))
+        provider.stream {
+            text("handled")
+            finish()
+        }
+
+        val message = runToEnd(
+            request(messages = listOf(UIMessage.user("hi"), assistant(notice("a")))),
+            noticeHooks,
+        ).finished().message
+
+        assertEquals(listOf(notice("a"), notice("b")), message.parts.take(2))
+        assertEquals(listOf("handled"), message.texts())
+        assertEquals(model.id, message.modelId)
+    }
+
+    @Test
+    fun `continuing a reply does not ask for pending parts`() = runTest {
+        val noticeHooks = PendingHooks(hooks, listOf(notice("a")))
+        provider.stream {
+            text(" more", id = "more")
+            finish()
+        }
+
+        val message = runToEnd(
+            request(messages = listOf(UIMessage.user("hi"), assistant(UIMessagePart.Text("partial")))),
+            noticeHooks,
+        ).finished().message
+
+        assertEquals(0, noticeHooks.calls)
+        assertTrue(message.parts.none { it is UIMessagePart.Notice })
+    }
 }
 
 /** 按调用顺序依次返回预设的响应，并记录每次请求 */
@@ -549,6 +662,22 @@ private class RecordingHooks(private val model: Model) : AgentHooks {
         return message
     }
 }
+
+/** 依次返回预设的 pending parts，用完后返回空 */
+private class PendingHooks(
+    delegate: AgentHooks,
+    vararg batches: List<UIMessagePart>,
+) : AgentHooks by delegate {
+    private val batches = ArrayDeque(batches.toList())
+    var calls = 0
+
+    override suspend fun pendingParts(): List<UIMessagePart> {
+        calls++
+        return batches.removeFirstOrNull().orEmpty()
+    }
+}
+
+private fun notice(name: String) = UIMessagePart.Notice(title = name, text = "<notice>$name</notice>")
 
 private suspend fun FlowCollector<StreamChunk>.text(text: String, id: String = "text") {
     emit(StreamChunk.TextStart(id))

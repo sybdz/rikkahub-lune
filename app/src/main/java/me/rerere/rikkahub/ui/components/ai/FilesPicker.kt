@@ -19,7 +19,9 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.TextAutoSize
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Badge
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
@@ -84,11 +86,20 @@ import me.rerere.rikkahub.utils.formatNumber
 import me.rerere.workspace.WorkspaceShellStatus
 import org.koin.compose.koinInject
 
+// 顺序决定切换方向：往后是进入下一级，往前是返回
 private enum class FilesPickerPage {
     MAIN,
     MCP,
     EXTENSIONS,
+    SEARCH,
+    SEARCH_PROVIDER,
 }
+
+private val FilesPickerPage.parent: FilesPickerPage
+    get() = when (this) {
+        FilesPickerPage.SEARCH_PROVIDER -> FilesPickerPage.SEARCH
+        else -> FilesPickerPage.MAIN
+    }
 
 @Composable
 internal fun FilesPicker(
@@ -101,6 +112,8 @@ internal fun FilesPicker(
     onCompressContext: (additionalPrompt: String, keepRecentMessages: Int) -> Job,
     onUpdateAssistant: (Assistant) -> Unit,
     onUpdateWorkspaceCwd: (String?) -> Unit,
+    onUpdateSearchMode: (SearchMode) -> Unit,
+    onUpdateSearchService: (Int) -> Unit,
     showCompressDialog: Boolean,
     onShowCompressDialogChange: (Boolean) -> Unit,
     onDismiss: () -> Unit,
@@ -125,14 +138,14 @@ internal fun FilesPicker(
     var showCwdSheet by remember { mutableStateOf(false) }
 
     var page by remember { mutableStateOf(FilesPickerPage.MAIN) }
-    // 在子页面时，返回键回到主页面而不是关闭 sheet
+    // 在子页面时，返回键回到上一级而不是关闭 sheet
     BackHandler(enabled = page != FilesPickerPage.MAIN) {
-        page = FilesPickerPage.MAIN
+        page = page.parent
     }
     AnimatedContent(
         targetState = page,
         transitionSpec = {
-            if (targetState != FilesPickerPage.MAIN) {
+            if (targetState > initialState) {
                 slideInHorizontally { it } + fadeIn() togetherWith
                     slideOutHorizontally { -it } + fadeOut()
             } else {
@@ -159,9 +172,30 @@ internal fun FilesPicker(
                 onDismissAll = onDismiss,
             )
 
+            FilesPickerPage.SEARCH -> SearchPickerPage(
+                enableSearch = assistant.enableWebSearch,
+                settings = settings,
+                model = chatModel,
+                onUpdateSearchMode = onUpdateSearchMode,
+                onSelectProvider = { page = FilesPickerPage.SEARCH_PROVIDER },
+                onBack = { page = FilesPickerPage.MAIN },
+                onDismissAll = onDismiss,
+            )
+
+            FilesPickerPage.SEARCH_PROVIDER -> SearchProviderPicker(
+                settings = settings,
+                onUpdateSearchService = { index ->
+                    onUpdateSearchService(index)
+                    page = FilesPickerPage.SEARCH
+                },
+                onBack = { page = FilesPickerPage.SEARCH },
+            )
+
+            // 矮屏上放不下时可以滚动，避免底部的压缩对话等入口被挤出屏幕
             FilesPickerPage.MAIN -> Column(
                 modifier = Modifier
                     .fillMaxWidth()
+                    .verticalScroll(rememberScrollState())
                     .padding(horizontal = 16.dp)
                     .padding(bottom = 16.dp),
                 verticalArrangement = Arrangement.spacedBy(16.dp)
@@ -187,11 +221,19 @@ internal fun FilesPicker(
                 val showMcp = settings.mcpServers.isNotEmpty()
                 // 限制了上下文消息数就是滚动上下文，旧消息会自动移出，不需要压缩
                 val showCompress = assistant.contextMessageLimit <= 0
-                val itemCount = 1 + listOf(showWorkspace, showWorkspace && showCwd, showMcp, showCompress).count { it }
+                val itemCount = 2 + listOf(showWorkspace, showWorkspace && showCwd, showMcp, showCompress).count { it }
                 var itemIndex = 0
                 Column(
                     verticalArrangement = Arrangement.spacedBy(ListItemDefaults.SegmentedGap),
                 ) {
+                    SearchPickerListItem(
+                        enableSearch = assistant.enableWebSearch,
+                        settings = settings,
+                        model = chatModel,
+                        shapes = ListItemDefaults.segmentedShapes(index = itemIndex++, count = itemCount),
+                        onClick = { page = FilesPickerPage.SEARCH },
+                    )
+
                     if (showWorkspace) {
                         WorkspacePickerListItem(
                             assistant = assistant,

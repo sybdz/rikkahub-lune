@@ -76,12 +76,14 @@ import me.rerere.hugeicons.stroke.Tick01
 import me.rerere.hugeicons.stroke.Wrench01
 import me.rerere.rikkahub.R
 import me.rerere.rikkahub.data.ai.tools.local.ASK_USER_TOOL_NAME
+import me.rerere.rikkahub.data.ai.tools.local.PHONE_USE_TOOL_NAME
+import me.rerere.rikkahub.data.ai.tools.local.phoneUseActionOf
 import me.rerere.rikkahub.data.model.GenerationPhase
 import me.rerere.rikkahub.service.ChatError
 import me.rerere.rikkahub.ui.components.ui.drawAppLogo
 import me.rerere.rikkahub.ui.components.ui.logoMorphShape
 import me.rerere.rikkahub.ui.components.ui.rememberAppLogoLayers
-import me.rerere.ui.markdown.Markdown
+import me.rerere.rikkahub.ui.components.richtext.MaterialMarkdown
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlin.math.ceil
@@ -313,7 +315,7 @@ private fun PanelHeader(
     }
 }
 
-// 用 ui 模块的通用 Markdown：应用里的 MarkdownBlock 依赖导航、Activity 等悬浮窗里没有的东西
+// 用不带应用功能的 MaterialMarkdown：应用里的 MarkdownBlock 依赖导航、Activity 等悬浮窗里没有的东西
 @Composable
 private fun MessagePreview(text: String, isReasoning: Boolean, generating: Boolean) {
     val scrollState = rememberScrollState()
@@ -330,9 +332,10 @@ private fun MessagePreview(text: String, isReasoning: Boolean, generating: Boole
             MaterialTheme.colorScheme.onSurface
         },
     ) {
-        Markdown(
+        MaterialMarkdown(
             content = text,
             style = MaterialTheme.typography.bodyMedium,
+            streaming = generating,
             modifier = Modifier
                 .fillMaxWidth()
                 .heightIn(max = 200.dp)
@@ -486,9 +489,15 @@ private fun FloatingChatUiState.statusText(): String {
     // 网络重试等提示优先
     processingStatus?.let { return it }
     return when (phase) {
-        is GenerationPhase.RunningTool -> stringResource(R.string.notification_live_update_tool, phase.toolName)
+        is GenerationPhase.RunningTool -> stringResource(R.string.notification_live_update_tool, phase.displayName())
         is GenerationPhase.Thinking -> stringResource(R.string.notification_live_update_thinking)
         is GenerationPhase.Writing -> stringResource(R.string.notification_live_update_writing)
         GenerationPhase.Waiting -> stringResource(R.string.notification_live_update_title)
     }
+}
+
+// Phone Use 一轮要调用很多次同一个工具，带上动作名才看得出进行到哪一步
+private fun GenerationPhase.RunningTool.displayName(): String {
+    if (toolName != PHONE_USE_TOOL_NAME) return toolName
+    return phoneUseActionOf(input)?.let { "$toolName · $it" } ?: toolName
 }

@@ -28,6 +28,7 @@ import com.petterp.floatingx.core.gesture.FxGesture
 import com.petterp.floatingx.core.layout.FxAdsorb
 import com.petterp.floatingx.core.layout.FxGravity
 import com.petterp.floatingx.core.storage.FxSpStorage
+import com.petterp.floatingx.system.container.FxWindowContainer
 import com.petterp.floatingx.system.permission.FxPermission
 import com.petterp.floatingx.system.permission.FxPermissionStrategy
 import com.petterp.floatingx.system.systemHost
@@ -50,10 +51,11 @@ import me.rerere.rikkahub.data.model.Conversation
 import me.rerere.rikkahub.data.model.GenerationPhase
 import me.rerere.rikkahub.data.model.generationPhase
 import me.rerere.rikkahub.data.model.pendingToolCalls
+import me.rerere.rikkahub.phoneuse.PhoneUseManager
 import me.rerere.rikkahub.service.ChatError
 import me.rerere.rikkahub.service.ChatFloatingTracker
 import me.rerere.rikkahub.service.ChatService
-import me.rerere.rikkahub.service.MessageQueueState
+import me.rerere.rikkahub.service.InboxState
 import me.rerere.rikkahub.ui.theme.RikkahubTheme
 import kotlin.uuid.Uuid
 
@@ -70,9 +72,11 @@ class ChatFloatingWindows(
     private val context: Application,
     private val appScope: AppScope,
     private val tracker: ChatFloatingTracker,
+    private val phoneUseManager: PhoneUseManager,
     lazyChatService: Lazy<ChatService>,
 ) {
     private val chatService by lazyChatService
+    private val windowManager = context.getSystemService(WindowManager::class.java)
     private var bubble: FxControl? = null
     private var panel: FxControl? = null
 
@@ -99,6 +103,29 @@ class ChatFloatingWindows(
         appScope.launch {
             tracker.window.map { it?.expanded }.distinctUntilChanged().collect(::render)
         }
+        appScope.launch {
+            phoneUseManager.acting.collect(::yieldScreen)
+        }
+    }
+
+    /**
+     * Phone Use 截图或执行手势时让出屏幕：悬浮窗不能出现在截图里，也不能挡住落在它位置上的点击。
+     * 不用 hide()，它带动画，每个动作都收起再弹出会一直闪；这里只让窗口透明并且不接收触摸。
+     * 透明度要改窗口参数而不是 View：Android 12 起，触摸穿过不透明的悬浮窗落到别的应用上会被系统丢弃，
+     * 系统看的是窗口的透明度。
+     */
+    private fun yieldScreen(yielding: Boolean) {
+        // 展开的面板盖住屏幕上半部分还占着输入焦点，模型操作时直接收起
+        if (yielding) tracker.collapse()
+        listOfNotNull(bubble, panel).forEach { control ->
+            val window = generateSequence(control.contentView?.parent) { it.parent }
+                .filterIsInstance<FxWindowContainer>()
+                .firstOrNull() ?: return@forEach
+            window.windowParams.alpha = if (yielding) 0f else 1f
+            window.setWindowTouchable(!yielding)
+            // setWindowTouchable 在标志没变时不会提交，透明度单独提交一次
+            if (window.isAttachedToWm) windowManager.updateViewLayout(window, window.windowParams)
+        }
     }
 
     private fun chatState(id: Uuid): Flow<FloatingChatUiState> {
@@ -111,7 +138,7 @@ class ChatFloatingWindows(
             conversation,
             chatService.getGenerationJobStateFlow(id).map { it != null },
             chatService.getProcessingStatusFlow(id),
-            chatService.getMessageQueueFlow(id),
+            chatService.getInboxFlow(id),
             error,
         ) { (conversation, replyMessageId), generating, processingStatus, queue, error ->
             buildFloatingChatUiState(conversation, replyMessageId, generating, processingStatus, queue, error)
@@ -164,7 +191,7 @@ class ChatFloatingWindows(
                     },
                     onStop = { appScope.launch { chatService.stopGeneration(conversationId) } },
                     onSend = { text -> chatService.sendMessage(conversationId, listOf(UIMessagePart.Text(text))) },
-                    onResumeQueue = { chatService.resumeMessageQueue(conversationId) },
+                    onResumeQueue = { chatService.resumeInbox(conversationId) },
                 )
             }
         }
@@ -232,7 +259,7 @@ internal fun buildFloatingChatUiState(
     replyMessageId: Uuid?,
     generating: Boolean,
     processingStatus: String?,
-    queue: MessageQueueState,
+    queue: InboxState,
     error: ChatError?,
 ): FloatingChatUiState {
     // 不看末尾也不看节点选中的分支：重新生成较早的消息时，后面的节点还在，用户也可能切回了旧回复
@@ -253,7 +280,7 @@ internal fun buildFloatingChatUiState(
         previewIsReasoning = text.isEmpty(),
         // 和 ChatService 判断是否在等审批用同一个条件，否则快速回复会被审批挡住却看不到原因
         pendingTools = conversation.pendingToolCalls,
-        queuedCount = queue.messages.size,
+        queuedCount = queue.items.size,
         queuePaused = queue.paused,
         error = error,
     )

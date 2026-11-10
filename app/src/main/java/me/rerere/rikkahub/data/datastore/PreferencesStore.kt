@@ -113,6 +113,8 @@ class SettingsStore internal constructor(
         val SELECT_MODEL = stringPreferencesKey("chat_model")
         val FAST_MODEL = stringPreferencesKey("fast_model")
         val FAST_MODEL_REASONING_LEVEL = stringPreferencesKey("fast_model_reasoning_level")
+        val MEMORY_MODEL = stringPreferencesKey("memory_model")
+        val MEMORY_MODEL_REASONING_LEVEL = stringPreferencesKey("memory_model_reasoning_level")
         val TRANSLATE_MODEL = stringPreferencesKey("translate_model")
         val ENABLE_SUGGESTION = booleanPreferencesKey("enable_suggestion")
         val IMAGE_GENERATION_MODEL = stringPreferencesKey("image_generation_model")
@@ -124,6 +126,10 @@ class SettingsStore internal constructor(
         val SUGGESTION_PROMPT = stringPreferencesKey("suggestion_prompt")
         val OCR_MODEL = stringPreferencesKey("ocr_model")
         val OCR_PROMPT = stringPreferencesKey("ocr_prompt")
+
+        // 自动压缩
+        val ENABLE_AUTO_COMPRESS = booleanPreferencesKey("enable_auto_compress")
+        val AUTO_COMPRESS_THRESHOLD = floatPreferencesKey("auto_compress_threshold")
 
         // 提供商
         val PROVIDERS = stringPreferencesKey("providers")

@@ -15,6 +15,7 @@ import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import me.rerere.ai.ui.finishReasoning
 import me.rerere.rikkahub.data.model.Conversation
+import me.rerere.rikkahub.data.model.isAwaitingToolApproval
 import java.time.Instant
 import java.util.concurrent.atomic.AtomicInteger
 import kotlin.uuid.Uuid
@@ -68,7 +69,7 @@ class ConversationSession(
     var incarnation = 0
         private set
 
-    val messageQueue = MessageQueue()
+    val inbox = ConversationInbox()
 
     /**
      * 页面切换和 SSE 重连只加载一次。[load] 返回 null 表示数据库里没有这个会话，改用 [create] 新建。
@@ -233,9 +234,25 @@ class ConversationSession(
     private val activeJobs = mutableSetOf<Job>()
     val generationJob: StateFlow<Job?> = _generationJob.asStateFlow()
     val isGenerating: Boolean get() = _generationJob.value?.isActive == true
+
+    // 任务槽里的任务在做什么；槽空着时是 null。界面靠它区分生成回复和压缩上下文
+    private val _activity = MutableStateFlow<SessionActivity?>(null)
+    val activity: StateFlow<SessionActivity?> = _activity.asStateFlow()
+
+    /**
+     * 能否自动开始下一轮（收件箱派发、自动压缩）：任务槽空着，且这一轮没有在等工具审批。
+     * 压缩也占任务槽，所以压缩期间同样不会开始。
+     */
+    val canStartNextTurn: Boolean
+        get() = _generationJob.value == null && !state.value.isAwaitingToolApproval
+
+    // 自动压缩已经为哪条回复试过；压缩失败后不再为同一条回复反复重试
+    @Volatile
+    var autoCompressedReplyId: Uuid? = null
+
     val isInUse: Boolean
         get() = refCount.get() > 0 || _generationJob.value != null ||
-            messageQueue.state.value.messages.isNotEmpty()
+            inbox.state.value.items.isNotEmpty()
 
     // 空闲检查任务
     private var idleCheckJob: Job? = null
@@ -249,9 +266,11 @@ class ConversationSession(
     }
 
     @Synchronized
-    fun setJob(job: Job?, cancelPrevious: Boolean = true) {
+    fun setJob(job: Job?, cancelPrevious: Boolean = true, activity: SessionActivity = SessionActivity.Generating) {
         val previous = _generationJob.value
         if (job != null) generationStartedAt.value = System.currentTimeMillis()
+        // 先于任务槽更新，界面看到新任务时类型已经对了
+        _activity.value = activity.takeIf { job != null }
         _generationJob.value = job
         if (cancelPrevious) previous?.cancel()
         if (job != null) activeJobs.add(job)
@@ -262,6 +281,7 @@ class ConversationSession(
                 if (!cancelPrevious && cause is CancellationException) previous?.cancel()
                 // A replaced job must not clear or advance its successor.
                 if (_generationJob.compareAndSet(job, null)) {
+                    _activity.value = null
                     onGenerationFinished(id, cause)
                     if (refCount.get() <= 0) scheduleIdleCheck()
                 }
@@ -271,6 +291,12 @@ class ConversationSession(
     }
 
     fun getJob(): Job? = _generationJob.value
+
+    /** 占着任务槽的任务中途换了在做的事（生成回复的中途压缩上下文）；槽空着时不改 */
+    @Synchronized
+    fun setActivity(activity: SessionActivity) {
+        if (_generationJob.value != null) _activity.value = activity
+    }
 
     @Synchronized
     fun cancelJobs(): List<Job> = activeJobs.toList().also { jobs ->
@@ -313,6 +339,15 @@ class ConversationSession(
 }
 
 /** Serialize approval saves without cancelling earlier decisions; stopping cancels the whole chain. */
+/** 会话任务槽里的任务类型 */
+enum class SessionActivity {
+    /** 生成回复：发送、重新生成、审批后继续 */
+    Generating,
+
+    /** 压缩上下文：手动或自动 */
+    Compressing,
+}
+
 internal suspend fun afterPreviousGeneration(previous: Job?, block: suspend () -> Unit) {
     try {
         previous?.join()

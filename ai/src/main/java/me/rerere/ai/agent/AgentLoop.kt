@@ -50,14 +50,18 @@ internal class AgentLoop(
         var steps = 0
         while (true) {
             val current = message
+            var toolsExecuted = false
             if (current != null && current.getTools().any { !it.isExecuted }) {
                 val pending = requestApprovals(current)
                 if (pending.isNotEmpty()) return finish(AgentFinishReason.AwaitingApproval(pending))
                 executeTools()
+                toolsExecuted = true
             } else if (current != null && steps > 0) {
                 return finish(AgentFinishReason.Completed)
             }
             if (steps == request.maxSteps) return finish(AgentFinishReason.StepLimitReached)
+            // 只在刚执行完工具时问：接着一条已经执行完的消息继续时不问，否则暂停之后再运行又会立刻暂停
+            if (toolsExecuted && hooks.shouldPause(checkNotNull(message))) return finish(AgentFinishReason.Paused)
             generateStep()
             steps++
         }
@@ -82,10 +86,12 @@ internal class AgentLoop(
     }
 
     private suspend fun generateStep() {
+        appendPendingParts()
         val current = message
         val step = hooks.prepareStep(if (current == null) history else history + current)
         val params = step.params.copy(tools = request.tools)
-        val base = current ?: UIMessage(
+        // 只带着追加内容创建的消息还没有模型 id
+        val base = current?.let { it.copy(modelId = it.modelId ?: params.model.id) } ?: UIMessage(
             role = MessageRole.ASSISTANT,
             parts = emptyList(),
             modelId = params.model.id,
@@ -96,6 +102,16 @@ internal class AgentLoop(
             generate(step.messages, params, base)
         }
         update(hooks.finishStep(generated, newPartsFrom = base.parts.size).copy(finishedAt = now()))
+    }
+
+    // 续写普通回复时最后一个 part 不是执行完的工具或通知，这时追加会把续写变成新的一轮
+    private suspend fun appendPendingParts() {
+        val current = message
+        if (current != null && !current.parts.lastOrNull().isModelsTurn()) return
+        val parts = hooks.pendingParts()
+        if (parts.isEmpty()) return
+        val base = current ?: UIMessage(role = MessageRole.ASSISTANT, parts = emptyList())
+        update(base.copy(parts = base.parts + parts))
     }
 
     private suspend fun stream(
@@ -220,6 +236,9 @@ internal class AgentLoop(
         events.emit(AgentEvent.Finished(checkNotNull(message), reason))
     }
 }
+
+private fun UIMessagePart?.isModelsTurn() =
+    (this is UIMessagePart.Tool && isExecuted) || this is UIMessagePart.Notice
 
 private fun errorOutput(error: String): List<UIMessagePart> =
     listOf(UIMessagePart.Text(buildJsonObject { put("error", error) }.toString()))
